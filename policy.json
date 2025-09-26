@@ -1,0 +1,9 @@
+bindings:
+- members:
+  - projectEditor:caramel-abacus-472612-h3
+  - projectOwner:caramel-abacus-472612-h3
+  role: roles/storage.legacyBucketOwner
+- members:
+  - projectViewer:caramel-abacus-472612-h3
+  role: roles/storage.legacyBucketReader
+etag: CAE=
