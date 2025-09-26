@@ -1,0 +1,28 @@
+# Terraform
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.backup
+*.tfplan
+*.tfplan.json
+
+# Fichiers de log
+*.log
+
+# Répertoires de crash
+crash.log
+crash.*.log
+
+# Fichiers d'exclusion
+.terraformrc
+terraform.rc
+
+# Fichiers IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Fichiers OS
+.DS_Store
+Thumbs.db
