@@ -10,6 +10,8 @@ export CLOUDSDK_CORE_DISABLE_PROMPTS=1
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="${SCRIPT_DIR}"
 ENVS_DIR="${PROJECT_DIR}/envs"
+IAM_DIR="${PROJECT_DIR}/iam"
+IAM_ENVS_DIR="${IAM_DIR}/envs"
 
 # -------------
 # Logging utils
@@ -34,6 +36,8 @@ ensure_prereqs() {
   require_bin gcloud
   [[ -f "${ENVS_DIR}/dev.tfvars" ]] || die "Missing ${ENVS_DIR}/dev.tfvars"
   [[ -f "${ENVS_DIR}/prd.tfvars" ]] || die "Missing ${ENVS_DIR}/prd.tfvars"
+  [[ -f "${IAM_ENVS_DIR}/dev.tfvars" ]] || die "Missing ${IAM_ENVS_DIR}/dev.tfvars"
+  [[ -f "${IAM_ENVS_DIR}/prd.tfvars" ]] || die "Missing ${IAM_ENVS_DIR}/prd.tfvars"
 }
 
 # -------------
@@ -69,6 +73,16 @@ tfvar_get() {
   sed -n -E "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\"([^\"]*)\".*/\1/p" "$file" | tail -n1
 }
 
+tfvar_get_list() {
+  local file="$1" key="$2"
+  local line
+  line="$(sed -n -E "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\\[(.*)\\][[:space:]]*$/\\1/p" "$file" | tail -n1)"
+  line="${line//\"/}"
+  line="${line// /}"
+  IFS=',' read -r -a arr <<< "$line"
+  printf '%s\n' "${arr[@]}"
+}
+
 # Add helper to fetch first non-empty key
 tfvar_first() {
   local file="$1"; shift
@@ -90,6 +104,12 @@ ensure_compute_api() {
   local project="$1"
   info "Ensuring Compute API is enabled for project ${project}"
   gcloud services enable compute.googleapis.com --project="${project}" >/dev/null
+}
+
+ensure_iam_apis() {
+  local project="$1"
+  info "Ensuring Resource Manager and IAM APIs are enabled for project ${project}"
+  gcloud services enable cloudresourcemanager.googleapis.com iam.googleapis.com --project="${project}" >/dev/null
 }
 
 # -----------------
@@ -175,6 +195,50 @@ deploy_env() {
   info "================ Completed ${label} deployment ============="
 }
 
+# -----------------
+# IAM deployment
+# -----------------
+deploy_iam_env() {
+  local label="$1" tfvars="$2"
+
+  info "==================== Applying IAM ${label} ===================="
+
+  local project team_role instructor_role instructor_email enable_instructor_binding
+  project="$(tfvar_get "${tfvars}" "project_id" || true)"
+  [[ -n "${project}" ]] || die "project_id not found in ${tfvars}"
+
+  team_role="$(tfvar_get "${tfvars}" "team_role" || true)"
+  [[ -n "${team_role}" ]] || team_role="roles/editor"
+
+  instructor_role="$(tfvar_get "${tfvars}" "instructor_role" || true)"
+  [[ -n "${instructor_role}" ]] || instructor_role="roles/viewer"
+
+  instructor_email="$(tfvar_get "${tfvars}" "instructor_email" || true)"
+  enable_instructor_binding="$(tfvar_get "${tfvars}" "enable_instructor_binding" || true)"
+  [[ -n "${enable_instructor_binding}" ]] || enable_instructor_binding="true"
+
+  ensure_iam_apis "${project}"
+
+  while IFS= read -r email; do
+    [[ -n "${email}" ]] || continue
+    info "Ensuring IAM binding: ${email} -> ${team_role} on project ${project}"
+    gcloud projects add-iam-policy-binding "${project}" \
+      --member="user:${email}" \
+      --role="${team_role}" \
+      --quiet >/dev/null
+  done < <(tfvar_get_list "${tfvars}" "team_member_emails")
+
+  if [[ "${enable_instructor_binding}" == "true" && -n "${instructor_email}" ]]; then
+    info "Ensuring IAM binding: instructor ${instructor_email} -> ${instructor_role} on project ${project}"
+    gcloud projects add-iam-policy-binding "${project}" \
+      --member="user:${instructor_email}" \
+      --role="${instructor_role}" \
+      --quiet >/dev/null
+  fi
+
+  info "================ Completed IAM ${label} ============="
+}
+
 # ----
 # Main
 # ----
@@ -188,6 +252,9 @@ main() {
 
   deploy_env "dev" "${ENVS_DIR}/dev.tfvars"
   deploy_env "prod" "${ENVS_DIR}/prd.tfvars"
+
+  deploy_iam_env "dev" "${IAM_ENVS_DIR}/dev.tfvars"
+  deploy_iam_env "prod" "${IAM_ENVS_DIR}/prd.tfvars"
 
   info "All environments deployed successfully."
 }
