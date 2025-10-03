@@ -69,6 +69,19 @@ tfvar_get() {
   sed -n -E "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\"([^\"]*)\".*/\1/p" "$file" | tail -n1
 }
 
+tfvar_first() {
+  local file="$1"; shift
+  local k v
+  for k in "$@"; do
+    v="$(tfvar_get "$file" "$k" || true)"
+    if [[ -n "$v" ]]; then
+      printf '%s' "$v"
+      return 0
+    fi
+  done
+  return 1
+}
+
 # -------------------------
 # GCP project/service setup
 # -------------------------
@@ -127,21 +140,21 @@ destroy_env() {
 
   info "==================== Destroying ${label} ===================="
 
-  local project region network_name subnet_name
+  local project region vpc_name subnet_name
   project="$(tfvar_get "${tfvars}" "project_id" || true)"
   region="$(tfvar_get "${tfvars}" "region" || true)"
-  network_name="$(tfvar_get "${tfvars}" "network_name" || true)"
+  vpc_name="$(tfvar_first "${tfvars}" vpc_name network_name || true)"
 
-  [[ -n "${project}" ]] || die "project_id not found in ${tfvars}"
-  [[ -n "${region}" ]] || die "region not found in ${tfvars}"
-  [[ -n "${network_name}" ]] || die "network_name not found in ${tfvars}"
+  [[ -n "${project}" ]]  || die "project_id not found in ${tfvars}"
+  [[ -n "${region}" ]]   || die "region not found in ${tfvars}"
+  [[ -n "${vpc_name}" ]] || die "vpc_name (or network_name) not found in ${tfvars}"
 
-  subnet_name="${network_name}-subnet"
+  subnet_name="${vpc_name}-subnet"
 
   ensure_compute_api "${project}"
 
   delete_subnet_if_exists "${project}" "${region}" "${subnet_name}" || true
-  delete_network_if_exists "${project}" "${network_name}" || true
+  delete_network_if_exists "${project}" "${vpc_name}" || true
 
   info "================ Completed ${label} destruction ============"
 }

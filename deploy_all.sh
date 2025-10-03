@@ -69,6 +69,20 @@ tfvar_get() {
   sed -n -E "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*\"([^\"]*)\".*/\1/p" "$file" | tail -n1
 }
 
+# Add helper to fetch first non-empty key
+tfvar_first() {
+  local file="$1"; shift
+  local k v
+  for k in "$@"; do
+    v="$(tfvar_get "$file" "$k" || true)"
+    if [[ -n "$v" ]]; then
+      printf '%s' "$v"
+      return 0
+    fi
+  done
+  return 1
+}
+
 # -------------------------
 # GCP project/service setup
 # -------------------------
@@ -123,38 +137,38 @@ deploy_env() {
 
   info "==================== Deploying ${label} ===================="
 
-  local project region network_name ip_range subnet_name
+  local project region vpc_name cidr_block subnet_name
   project="$(tfvar_get "${tfvars}" "project_id" || true)"
   region="$(tfvar_get "${tfvars}" "region" || true)"
-  network_name="$(tfvar_get "${tfvars}" "network_name" || true)"
-  ip_range="$(tfvar_get "${tfvars}" "ip_range" || true)"
+  vpc_name="$(tfvar_first "${tfvars}" vpc_name network_name || true)"
+  cidr_block="$(tfvar_first "${tfvars}" cidr_block ip_range || true)"
 
-  [[ -n "${project}" ]] || die "project_id not found in ${tfvars}"
-  [[ -n "${region}" ]] || die "region not found in ${tfvars}"
-  [[ -n "${network_name}" ]] || die "network_name not found in ${tfvars}"
-  [[ -n "${ip_range}" ]] || die "ip_range not found in ${tfvars}"
+  [[ -n "${project}" ]]    || die "project_id not found in ${tfvars}"
+  [[ -n "${region}" ]]     || die "region not found in ${tfvars}"
+  [[ -n "${vpc_name}" ]]   || die "vpc_name (or network_name) not found in ${tfvars}"
+  [[ -n "${cidr_block}" ]] || die "cidr_block (or ip_range) not found in ${tfvars}"
 
-  subnet_name="${network_name}-subnet"
+  subnet_name="${vpc_name}-subnet"
 
   ensure_compute_api "${project}"
 
-  if network_exists "${project}" "${network_name}"; then
-    info "VPC network '${network_name}' already exists in project '${project}'"
+  if network_exists "${project}" "${vpc_name}"; then
+    info "VPC network '${vpc_name}' already exists in project '${project}'"
   else
-    create_network_custom "${project}" "${network_name}"
-    info "Created VPC network '${network_name}'"
+    create_network_custom "${project}" "${vpc_name}"
+    info "Created VPC network '${vpc_name}'"
   fi
 
   if subnet_exists "${project}" "${region}" "${subnet_name}"; then
     local existing_cidr
     existing_cidr="$(get_subnet_cidr "${project}" "${region}" "${subnet_name}")"
-    if [[ "${existing_cidr}" != "${ip_range}" ]]; then
-      warn "Subnet '${subnet_name}' already exists with CIDR '${existing_cidr}', which differs from desired '${ip_range}'. Skipping change (CIDR updates require manual migration)."
+    if [[ "${existing_cidr}" != "${cidr_block}" ]]; then
+      warn "Subnet '${subnet_name}' CIDR '${existing_cidr}' != desired '${cidr_block}'. Skipping change."
     else
       info "Subnet '${subnet_name}' already exists with matching CIDR '${existing_cidr}'"
     fi
   else
-    create_subnet "${project}" "${region}" "${network_name}" "${subnet_name}" "${ip_range}"
+    create_subnet "${project}" "${region}" "${vpc_name}" "${subnet_name}" "${cidr_block}"
     info "Created subnet '${subnet_name}' in region '${region}'"
   fi
 
