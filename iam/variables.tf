@@ -3,6 +3,11 @@ variable "project_id" {
   type        = string
 }
 
+variable "region" {
+  description = "GCP region"
+  type        = string
+}
+
 variable "team_member_emails" {
   description = "List of team member emails"
   type        = list(string)
