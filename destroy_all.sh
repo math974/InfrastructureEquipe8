@@ -56,25 +56,6 @@ destroy_envs_in_dir() {
         fi
         log "Destroying environment '${env}' in ${dir}"
         "${TF_BIN}" destroy -input=false -auto-approve -var-file="${tfvars_path}"
-        if [ "${module_suffix}" = "iam" ]; then
-          project_id_cleanup="$(awk -F'=' '/^[[:space:]]*project_id[[:space:]]*=/{gsub(/[ "]/,"",$2); print $2}' "${tfvars_path}" 2>/dev/null || true)"
-          current_acct="$(gcloud config get-value account 2>/dev/null | tr -d '[:space:]')"
-          if [ -n "${project_id_cleanup:-}" ] && [ -n "${current_acct:-}" ]; then
-            for role in roles/editor roles/viewer; do
-              members="$(gcloud projects get-iam-policy "${project_id_cleanup}" --flatten="bindings[].members" --filter="bindings.role=${role}" --format="value(bindings.members)" 2>/dev/null || true)"
-              if [ -n "${members:-}" ]; then
-                for m in ${members}; do
-                  if [[ "${m}" == user:* && "${m}" != "user:${current_acct}" ]]; then
-                    log "Removing ${role} for member ${m} on project ${project_id_cleanup}"
-                    gcloud projects remove-iam-policy-binding "${project_id_cleanup}" --member="${m}" --role="${role}" --quiet >/dev/null 2>&1 || true
-                  fi
-                done
-              fi
-            done
-          else
-            log "Skipping IAM prune: missing project_id or current gcloud account"
-          fi
-        fi
       else
         log "Workspace '${env}' not found in ${dir}; skipping"
       fi
@@ -84,10 +65,9 @@ destroy_envs_in_dir() {
 
 main() {
   require_bin "${TF_BIN}"
-  require_bin "gcloud"
   export TF_IN_AUTOMATION=1
 
-  destroy_envs_in_dir "${ROOT_DIR}/iam" "envs"
+  # destroy_envs_in_dir "${ROOT_DIR}/iam" "envs"
 
   destroy_envs_in_dir "${ROOT_DIR}/netwoks" "envs"
 
