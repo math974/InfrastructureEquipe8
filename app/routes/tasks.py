@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
-from typing import List
+from typing import List, Dict, Any
 
 from fastapi import APIRouter, HTTPException, status
 
@@ -13,6 +13,7 @@ from app.core.db import (
     parse_rfc3339,
     row_to_task,
     to_utc,
+    enqueue_scheduled_op,
 )
 from app.core.models import TaskCreate, TaskDelete, TaskOut, TaskUpdate
 
@@ -98,14 +99,14 @@ async def get_task(
 
 @router.put(
     "/{task_id}",
-    response_model=TaskOut,
+    # Response may be immediate TaskOut or a scheduling confirmation dict
     status_code=status.HTTP_200_OK,
     summary="Update a task",
 )
 async def update_task(
     task_id: int,
     payload: TaskUpdate,
-):
+) -> Dict[str, Any]:
     req_ts = to_utc(payload.request_timestamp)
     req_ts_norm = normalize_rfc3339(req_ts)
 
@@ -124,6 +125,21 @@ async def update_task(
                 status_code=status.HTTP_409_CONFLICT, detail="Timestamp conflict"
             )
 
+        # If the requested timestamp is in the future, enqueue the operation
+        now_iso = iso_utc_now()
+        if req_ts_norm > now_iso:
+            # Prepare payload for scheduling
+            sched_payload: Dict[str, Any] = {
+                "title": payload.title if payload.title is not None else row["title"],
+                "content": payload.content if payload.content is not None else row["content"],
+                "due_date": payload.due_date.isoformat() if payload.due_date is not None else row["due_date"],
+                "done": int(payload.done) if payload.done is not None else row["done"],
+                "request_timestamp": req_ts_norm,
+            }
+            op_id = enqueue_scheduled_op(conn, task_id, "update", sched_payload, req_ts_norm, req_ts_norm)
+            return {"id": task_id, "scheduled": True, "execute_at": req_ts_norm, "op_id": op_id}
+
+        # Otherwise apply immediately (existing behavior)
         new_title = payload.title if payload.title is not None else row["title"]
         new_content = payload.content if payload.content is not None else row["content"]
         new_due_date = (
@@ -164,14 +180,16 @@ async def update_task(
 
 @router.delete(
     "/{task_id}",
+    # Response may be immediate deletion confirmation or a scheduling confirmation dict
     status_code=status.HTTP_200_OK,
     summary="Delete a task",
 )
 async def delete_task(
     task_id: int,
     payload: TaskDelete,
-):
+) -> Dict[str, Any]:
     req_ts = to_utc(payload.request_timestamp)
+    req_ts_norm = normalize_rfc3339(req_ts)
 
     with get_db() as conn:
         cur = conn.cursor()
@@ -188,6 +206,14 @@ async def delete_task(
                 status_code=status.HTTP_409_CONFLICT, detail="Timestamp conflict"
             )
 
+        now_iso = iso_utc_now()
+        if req_ts_norm > now_iso:
+            # Schedule delete
+            sched_payload = {"request_timestamp": req_ts_norm}
+            op_id = enqueue_scheduled_op(conn, task_id, "delete", sched_payload, req_ts_norm, req_ts_norm)
+            return {"id": task_id, "scheduled": True, "execute_at": req_ts_norm, "op_id": op_id}
+
+        # Immediate delete
         cur.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
         conn.commit()
         return {"id": task_id, "deleted": True}

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 import uuid
+import asyncio
 from typing import Any, Dict
 
 from fastapi import FastAPI, HTTPException, Request, status
@@ -9,7 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 
-from app.core.db import init_db
+from app.core.db import init_db, process_due_scheduled_ops_once
 
 from app.routes.tasks import router as tasks_router
 
@@ -94,7 +95,39 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 @app.on_event("startup")
 def on_startup():
     init_db()
+    # start background scheduler
+    loop = asyncio.get_event_loop()
+    # store task on app.state to allow cancellation
+    app.state._sched_task = loop.create_task(_scheduled_ops_runner())
 
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    # cancel scheduler if running
+    sched = getattr(app.state, "_sched_task", None)
+    if sched:
+        sched.cancel()
+        try:
+            await sched
+        except asyncio.CancelledError:
+            pass
+
+
+async def _scheduled_ops_runner():
+    """
+    Background runner that periodically processes due scheduled operations.
+    Runs until application shutdown.
+    """
+    try:
+        while True:
+            try:
+                processed = await asyncio.to_thread(process_due_scheduled_ops_once)
+            except Exception:
+                processed = 0
+            # sleep a short time; tuned to 1 second for prompt execution
+            await asyncio.sleep(1)
+    except asyncio.CancelledError:
+        return
 
 if __name__ == "__main__":
     import uvicorn

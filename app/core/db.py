@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import json
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 DB_PATH = os.path.join(BASE_DIR, "tasks.db")
@@ -64,6 +65,7 @@ def init_db() -> None:
     Initialize the database schema if it doesn't exist.
     Creates indices and a UNIQUE constraint to prevent duplicate tasks
     for the same (title, due_date) pair.
+    Also creates scheduled_ops table for deferred operations.
     """
     with get_db() as conn:
         cur = conn.cursor()
@@ -104,6 +106,23 @@ def init_db() -> None:
         cur.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
 
+        # New table for scheduled operations
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS scheduled_ops (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER,
+                op_type TEXT NOT NULL, -- 'update' or 'delete'
+                payload TEXT NOT NULL, -- JSON payload for the op
+                execute_at TEXT NOT NULL, -- RFC3339 execute timestamp (UTC)
+                request_ts TEXT NOT NULL, -- original request timestamp (RFC3339, UTC)
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_schedops_execute_at ON scheduled_ops(execute_at)"
+        )
         conn.commit()
 
 
@@ -123,6 +142,126 @@ def row_to_task(row: sqlite3.Row) -> Dict[str, Any]:
     }
 
 
+# New helpers for scheduled operations
+
+def enqueue_scheduled_op(
+    conn: sqlite3.Connection,
+    task_id: Optional[int],
+    op_type: str,
+    payload: Dict[str, Any],
+    execute_at: str,
+    request_ts: str,
+) -> int:
+    """
+    Insert a scheduled operation and return its id.
+    """
+    cur = conn.cursor()
+    now_iso = iso_utc_now()
+    cur.execute(
+        """
+        INSERT INTO scheduled_ops (task_id, op_type, payload, execute_at, request_ts, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (task_id, op_type, json.dumps(payload), execute_at, request_ts, now_iso),
+    )
+    op_id = cur.lastrowid
+    conn.commit()
+    return op_id
+
+
+def fetch_due_scheduled_ops(conn: sqlite3.Connection, upto_iso: str) -> List[sqlite3.Row]:
+    """
+    Fetch scheduled operations with execute_at <= upto_iso.
+    """
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM scheduled_ops WHERE execute_at <= ? ORDER BY execute_at ASC", (upto_iso,))
+    return cur.fetchall()
+
+
+def delete_scheduled_op(conn: sqlite3.Connection, op_id: int) -> None:
+    cur = conn.cursor()
+    cur.execute("DELETE FROM scheduled_ops WHERE id = ?", (op_id,))
+    conn.commit()
+
+
+def process_due_scheduled_ops_once() -> int:
+    """
+    Process all scheduled operations that are due right now.
+    Returns the number of processed operations.
+    Each operation is applied only if its request_ts is still greater than the current stored last_request_ts.
+    """
+    processed = 0
+    with get_db() as conn:
+        cur = conn.cursor()
+        now_iso = iso_utc_now()
+        due_ops = fetch_due_scheduled_ops(conn, now_iso)
+        for op in due_ops:
+            try:
+                op_id = op["id"]
+                task_id = op["task_id"]
+                op_type = op["op_type"]
+                payload = json.loads(op["payload"])
+                req_ts = parse_rfc3339(op["request_ts"])
+
+                # For update/delete, check resource exists (for update we still allow applying if exists)
+                cur.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
+                row = cur.fetchone()
+                if not row:
+                    # Nothing to apply; remove scheduled op
+                    delete_scheduled_op(conn, op_id)
+                    continue
+
+                stored_last_ts = parse_rfc3339(row["last_request_ts"])
+                if not (req_ts > stored_last_ts):
+                    # Conflict at execution time; drop the scheduled op
+                    delete_scheduled_op(conn, op_id)
+                    continue
+
+                if op_type == "update":
+                    # Build updated values (payload contains fields like title, content, due_date, done)
+                    new_title = payload.get("title", row["title"])
+                    new_content = payload.get("content", row["content"])
+                    new_due_date = payload.get("due_date", row["due_date"])
+                    new_done = int(payload.get("done")) if payload.get("done") is not None else row["done"]
+                    now_iso_local = iso_utc_now()
+                    cur.execute(
+                        """
+                        UPDATE tasks
+                        SET title = ?, content = ?, due_date = ?, done = ?, updated_at = ?, last_request_ts = ?
+                        WHERE id = ?
+                        """,
+                        (
+                            new_title,
+                            new_content,
+                            new_due_date,
+                            new_done,
+                            now_iso_local,
+                            op["request_ts"],
+                            task_id,
+                        ),
+                    )
+                    conn.commit()
+                    # remove op
+                    delete_scheduled_op(conn, op_id)
+                    processed += 1
+                elif op_type == "delete":
+                    cur.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+                    conn.commit()
+                    delete_scheduled_op(conn, op_id)
+                    processed += 1
+                else:
+                    # Unknown op type; remove it to avoid looping
+                    delete_scheduled_op(conn, op_id)
+            except Exception:
+                # On any exception while processing an op, remove it to avoid retries/leaks
+                try:
+                    delete_scheduled_op(conn, op["id"])
+                except Exception:
+                    pass
+                continue
+    return processed
+
+
 __all__ = [
     "DB_PATH",
     "get_db",
@@ -132,4 +271,8 @@ __all__ = [
     "to_utc",
     "parse_rfc3339",
     "normalize_rfc3339",
+    "enqueue_scheduled_op",
+    "fetch_due_scheduled_ops",
+    "delete_scheduled_op",
+    "process_due_scheduled_ops_once",
 ]
