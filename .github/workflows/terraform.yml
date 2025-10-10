@@ -3,18 +3,10 @@ name: Terraform (Develop)
 on:
   pull_request:
     branches-ignore: [master]
-    paths:
-      - '**/*.tf'
-      - '**/*.tfvars'
-      - '.github/workflows/terraform.yml'
     paths-ignore:
       - 'bootstrap-wif/**'
   push:
     branches-ignore: [master]
-    paths:
-      - '**/*.tf'
-      - '**/*.tfvars'
-      - '.github/workflows/terraform.yml'
     paths-ignore:
       - 'bootstrap-wif/**'
 
