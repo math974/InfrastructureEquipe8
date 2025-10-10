@@ -19,8 +19,8 @@ env:
   TF_INPUT: false
 
 jobs:
-  fmt_validate:
-    name: Format & Validate
+  fmt_validate_networks:
+    name: Format & Validate (Networks)
     runs-on: ubuntu-latest
     environment:
       name: Develop
@@ -53,27 +53,27 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-terraform-
 
-      - name: Terraform Init (backend dev)
+      - name: Terraform Init (networks - backend dev)
         run: |
+          cd netwoks
           terraform init \
-            -backend-config=backends/dev.config
+            -backend-config=../configs/dev.config
 
-      - name: Terraform Format Check
+      - name: Terraform Format Check (networks)
         run: |
-          files=$(git ls-files '*.tf' | grep -v '^bootstrap-wif/')
-          if [ -n "$files" ]; then
-            terraform fmt -check $files
-          else
-            echo "No Terraform files to check."
-          fi
+          cd netwoks
+          terraform fmt -check -recursive
 
-      - name: Terraform Validate
-        run: terraform validate
+      - name: Terraform Validate (networks)
+        run: |
+          cd netwoks
+          terraform validate
 
-  plan:
-    name: Plan
+
+  plan_networks:
+    name: Plan (Networks)
     runs-on: ubuntu-latest
-    needs: fmt_validate
+    needs: [fmt_validate_networks]
     if: github.event_name == 'pull_request'
     environment:
       name: Develop
@@ -107,22 +107,25 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-terraform-
 
-      - name: Terraform Init (backend dev)
+      - name: Terraform Init (networks - backend dev)
         run: |
+          cd netwoks
           terraform init \
-            -backend-config=backends/dev.config
+            -backend-config=../configs/dev.config
 
-      - name: Terraform Plan (env dev)
-        id: plan
+      - name: Terraform Plan (networks - env dev)
+        id: plan_networks
         run: |
+          cd netwoks
           terraform plan \
             -var-file=envs/dev.tfvars \
             -input=false
 
-  apply:
-    name: Apply
+
+  apply_networks:
+    name: Apply (Networks)
     runs-on: ubuntu-latest
-    needs: fmt_validate
+    needs: [fmt_validate_networks]
     if: github.event_name == 'push'
     environment:
       name: Develop
@@ -155,15 +158,18 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-terraform-
 
-      - name: Terraform Init (backend dev)
+      - name: Terraform Init (networks - backend dev)
         run: |
+          cd netwoks
           terraform init \
-            -backend-config=backends/dev.config
+            -backend-config=../configs/dev.config
 
-      - name: Terraform Apply (env dev)
+      - name: Terraform Apply (networks - env dev)
         run: |
+          cd netwoks
           terraform apply \
             -auto-approve \
             -var-file=envs/dev.tfvars \
             -input=false
+
 
