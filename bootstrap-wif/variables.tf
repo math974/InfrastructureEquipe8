@@ -48,6 +48,7 @@ variable "roles" {
   type        = list(string)
   default = [
     "roles/storage.admin",
+    "roles/storage.objectViewer",
     "roles/compute.admin",
     "roles/iam.serviceAccountUser",
     "roles/viewer",
