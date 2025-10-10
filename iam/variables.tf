@@ -49,3 +49,9 @@ variable "auto_invite_missing_users" {
   type        = bool
   default     = true
 }
+
+variable "billing_account_id" {
+  description = "Billing account ID for IAM bindings"
+  type        = string
+  default     = "0100E9-D32BA7-35D6BE"
+}
