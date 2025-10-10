@@ -2,11 +2,11 @@ name: Terraform (Develop)
 
 on:
   pull_request:
-    branches-ignore: [master]
+    branches-ignore: [main]
     paths-ignore:
       - 'bootstrap-wif/**'
   push:
-    branches-ignore: [master]
+    branches-ignore: [main]
     paths-ignore:
       - 'bootstrap-wif/**'
 

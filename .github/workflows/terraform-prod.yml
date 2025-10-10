@@ -2,7 +2,7 @@ name: Terraform (Production)
 
 on:
   push:
-    branches: [master]
+    branches: [main]
     paths-ignore:
       - 'bootstrap-wif/**'
 
