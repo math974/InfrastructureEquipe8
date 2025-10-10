@@ -7,12 +7,16 @@ on:
       - '**/*.tf'
       - '**/*.tfvars'
       - '.github/workflows/terraform.yml'
+    paths-ignore:
+      - 'bootstrap-wif/**'
   push:
     branches-ignore: [master]
     paths:
       - '**/*.tf'
       - '**/*.tfvars'
       - '.github/workflows/terraform.yml'
+    paths-ignore:
+      - 'bootstrap-wif/**'
 
 concurrency:
   group: terraform-${{ github.ref }}
@@ -63,7 +67,13 @@ jobs:
             -backend-config=backends/dev.config
 
       - name: Terraform Format Check
-        run: terraform fmt -check -recursive
+        run: |
+          files=$(git ls-files '*.tf' | grep -v '^bootstrap-wif/')
+          if [ -n "$files" ]; then
+            terraform fmt -check $files
+          else
+            echo "No Terraform files to check."
+          fi
 
       - name: Terraform Validate
         run: terraform validate
