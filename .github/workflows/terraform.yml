@@ -121,7 +121,6 @@ jobs:
             -var-file=envs/dev.tfvars \
             -input=false
 
-
   apply_networks:
     name: Apply (Networks)
     runs-on: ubuntu-latest

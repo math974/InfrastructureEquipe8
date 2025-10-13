@@ -3,6 +3,15 @@ variable "project_id" {
   type        = string
 }
 
+variable "environment" {
+  description = "Environnement (dev ou prd)"
+  type        = string
+  validation {
+    condition     = contains(["dev", "prd"], var.environment)
+    error_message = "L'environnement doit être 'dev' ou 'prd'."
+  }
+}
+
 variable "pool_id" {
   description = "ID du Workload Identity Pool"
   type        = string
@@ -37,10 +46,10 @@ variable "github_repo" {
   type        = string
 }
 
-variable "branch_excluded" {
-  description = "Nom de la branche à exclure (ex: master)"
-  type        = string
-  default     = "master"
+variable "allowed_branches" {
+  description = "Branches autorisées pour cet environnement"
+  type        = list(string)
+  default     = []
 }
 
 variable "roles" {
