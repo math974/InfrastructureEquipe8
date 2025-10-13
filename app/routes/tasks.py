@@ -5,7 +5,7 @@ from typing import List, Dict, Any
 
 from fastapi import APIRouter, HTTPException, status
 
-from app.core.db import (
+from core.db import (
     get_db,
     iso_utc_now,
     normalize_rfc3339,
@@ -14,7 +14,7 @@ from app.core.db import (
     to_utc,
     enqueue_scheduled_op,
 )
-from app.core.models import TaskCreate, TaskDelete, TaskOut, TaskUpdate
+from core.models import TaskCreate, TaskDelete, TaskOut, TaskUpdate
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
