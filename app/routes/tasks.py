@@ -5,8 +5,7 @@ from typing import List, Dict, Any
 
 from fastapi import APIRouter, HTTPException, status
 
-
-from app.core.db import (
+from core.db import (
     get_db,
     iso_utc_now,
     normalize_rfc3339,
@@ -15,25 +14,35 @@ from app.core.db import (
     to_utc,
     enqueue_scheduled_op,
 )
-from app.core.models import TaskCreate, TaskDelete, TaskOut, TaskUpdate
+from core.models import TaskCreate, TaskDelete, TaskOut, TaskUpdate
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 
 @router.post(
     "",
-    response_model=TaskOut,
+    response_model=Dict[str, Any],
     status_code=status.HTTP_201_CREATED,
     summary="Create a new task",
 )
-async def create_task(
-    payload: TaskCreate,
-):
-    req_ts_norm = normalize_rfc3339(payload.request_timestamp)
+async def create_task(payload: TaskCreate):
+    req_ts = to_utc(payload.request_timestamp)
+    req_ts_norm = normalize_rfc3339(req_ts)
     now_iso = iso_utc_now()
     due_date_str = payload.due_date.isoformat() if payload.due_date else None
 
     with get_db() as conn:
+        if req_ts_norm > now_iso:
+            sched_payload = {
+                "title": payload.title,
+                "content": payload.content,
+                "due_date": due_date_str,
+                "done": 0,
+                "request_timestamp": req_ts_norm,
+            }
+            op_id = enqueue_scheduled_op(conn, None, "create", sched_payload, req_ts_norm, req_ts_norm)
+            return {"scheduled": True, "execute_at": req_ts_norm, "op_id": op_id}
+
         cur = conn.cursor()
         cur.execute(
             """
@@ -83,9 +92,7 @@ async def list_tasks():
     status_code=status.HTTP_200_OK,
     summary="Get a specific task",
 )
-async def get_task(
-    task_id: int,
-):
+async def get_task(task_id: int):
     with get_db() as conn:
         cur = conn.cursor()
         cur.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
@@ -99,14 +106,11 @@ async def get_task(
 
 @router.put(
     "/{task_id}",
-    # Response may be immediate TaskOut or a scheduling confirmation dict
+    response_model=Dict[str, Any],
     status_code=status.HTTP_200_OK,
     summary="Update a task",
 )
-async def update_task(
-    task_id: int,
-    payload: TaskUpdate,
-) -> Dict[str, Any]:
+async def update_task(task_id: int, payload: TaskUpdate):
     req_ts = to_utc(payload.request_timestamp)
     req_ts_norm = normalize_rfc3339(req_ts)
 
@@ -125,10 +129,8 @@ async def update_task(
                 status_code=status.HTTP_409_CONFLICT, detail="Timestamp conflict"
             )
 
-        # If the requested timestamp is in the future, enqueue the operation
         now_iso = iso_utc_now()
         if req_ts_norm > now_iso:
-            # Prepare payload for scheduling
             sched_payload: Dict[str, Any] = {
                 "title": payload.title if payload.title is not None else row["title"],
                 "content": payload.content if payload.content is not None else row["content"],
@@ -139,7 +141,6 @@ async def update_task(
             op_id = enqueue_scheduled_op(conn, task_id, "update", sched_payload, req_ts_norm, req_ts_norm)
             return {"id": task_id, "scheduled": True, "execute_at": req_ts_norm, "op_id": op_id}
 
-        # Otherwise apply immediately (existing behavior)
         new_title = payload.title if payload.title is not None else row["title"]
         new_content = payload.content if payload.content is not None else row["content"]
         new_due_date = (
@@ -180,14 +181,11 @@ async def update_task(
 
 @router.delete(
     "/{task_id}",
-    # Response may be immediate deletion confirmation or a scheduling confirmation dict
+    response_model=Dict[str, Any],
     status_code=status.HTTP_200_OK,
     summary="Delete a task",
 )
-async def delete_task(
-    task_id: int,
-    payload: TaskDelete,
-) -> Dict[str, Any]:
+async def delete_task(task_id: int, payload: TaskDelete):
     req_ts = to_utc(payload.request_timestamp)
     req_ts_norm = normalize_rfc3339(req_ts)
 

@@ -10,9 +10,9 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 
-from app.core.db import init_db, process_due_scheduled_ops_once
+from core.db import init_db, process_due_scheduled_ops_once
 
-from app.routes.tasks import router as tasks_router
+from routes.tasks import router as tasks_router
 
 
 app = FastAPI(title="Task Manager API", version="1.0.0")
@@ -128,6 +128,7 @@ async def _scheduled_ops_runner():
             await asyncio.sleep(1)
     except asyncio.CancelledError:
         return
+
 
 if __name__ == "__main__":
     import uvicorn
