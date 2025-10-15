@@ -17,3 +17,8 @@ variable "ip_range" {
   type        = string
   description = "IP range for the VPC network"
 }
+
+variable "user_email" {
+  type        = string
+  description = "Email address of the user to grant IAM roles"
+}
