@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import sqlite3
 import uuid
 import asyncio
 from typing import Any, Dict
+from sqlalchemy.exc import IntegrityError as DBIntegrityError
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -66,8 +66,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
 
 
-@app.exception_handler(sqlite3.IntegrityError)
-async def sqlite_integrity_handler(request: Request, exc: sqlite3.IntegrityError):
+@app.exception_handler(DBIntegrityError)
+async def db_integrity_handler(request: Request, exc: DBIntegrityError):
     headers = {
         "x-correlation-id": getattr(request.state, "correlation_id", ""),
         "correlation_id": getattr(request.state, "correlation_id", ""),
