@@ -1,22 +1,3 @@
-# Cloud SQL (MySQL) + Private IP integration into existing VPC
-#
-# This file provisions:
-# - a reserved internal IP range (global address) for VPC peering
-# - a service networking connection to enable Private Service Access
-# - a Cloud SQL instance (MySQL) with private IP only
-# - a database and an application user
-# - a random password for the application user (stored in Secret Manager)
-#
-# Assumptions:
-# - `google_compute_network.main` (VPC) is defined in this same Terraform workspace (see vpc_subnet.tf)
-# - `var.project_id` and `var.region` are defined (netwoks/variables.tf)
-# - The Service Networking API and Secret Manager API are enabled in the project
-#
-# NOTE:
-# - You may need to apply permission and API enabling steps (servicenetworking.googleapis.com,
-#   sqladmin.googleapis.com, secretmanager.googleapis.com, compute.googleapis.com).
-# - Adjust instance `tier` according to production requirements.
-
 variable "instance_name" {
   description = "Cloud SQL instance name (prefix)"
   type        = string
@@ -53,14 +34,12 @@ variable "private_ip_prefix_len" {
   default     = 16
 }
 
-# Random password for the DB user + root (separate secrets could be created if desired)
 resource "random_password" "db_app" {
   length           = 20
-  override_char_set = "!@#$%&*()-_=+"
+  override_special = "!@#$%&*()-_=+"
   special          = true
 }
 
-# Reserve an internal IP address range for the private connection (VPC peering)
 resource "google_compute_global_address" "private_ip_address" {
   name          = "${var.instance_name}-private-ip-range"
   project       = var.project_id
@@ -70,48 +49,72 @@ resource "google_compute_global_address" "private_ip_address" {
   network       = google_compute_network.main.self_link
 }
 
-# Create the service networking connection to enable Private Services Access
-resource "google_service_networking_connection" "private_vpc_connection" {
-  provider = google
-  network                 = google_compute_network.main.self_link
-  service                 = "servicenetworking.googleapis.com"
-  reserved_peering_ranges = [google_compute_global_address.private_ip_address.name]
-  project                 = var.project_id
+resource "google_project_service" "servicenetworking_api" {
+  project = var.project_id
+  service = "servicenetworking.googleapis.com"
+  disable_dependent_services = false
 }
 
-# Cloud SQL instance with private IP only
+resource "google_project_service" "sqladmin_api" {
+  project = var.project_id
+  service = "sqladmin.googleapis.com"
+}
+
+resource "google_project_service" "secretmanager_api" {
+  project = var.project_id
+  service = "secretmanager.googleapis.com"
+}
+
+resource "google_project_service" "compute_api" {
+  project = var.project_id
+  service = "compute.googleapis.com"
+}
+
+resource "google_service_networking_connection" "private_vpc_connection" {
+  provider                = google
+  network                 = google_compute_network.main.name
+  service                 = "servicenetworking.googleapis.com"
+  reserved_peering_ranges = [google_compute_global_address.private_ip_address.name]
+  depends_on = [
+    google_project_service.servicenetworking_api,
+    google_project_service.sqladmin_api,
+    google_project_service.secretmanager_api,
+    google_project_service.compute_api,
+  ]
+}
+
 resource "google_sql_database_instance" "mysql" {
-  name             = "${var.instance_name}"
+  name             = var.instance_name
   project          = var.project_id
   region           = var.region
   database_version = var.db_version
+  depends_on = [
+    google_service_networking_connection.private_vpc_connection,
+    google_compute_global_address.private_ip_address,
+    google_project_service.servicenetworking_api,
+    google_project_service.sqladmin_api,
+    google_project_service.secretmanager_api,
+    google_project_service.compute_api,
+  ]
 
   settings {
     tier = var.db_tier
 
     ip_configuration {
-      # disable public IP
       ipv4_enabled = false
-
-      # attach to the existing VPC network (private IP)
-      # use self_link of the network
       private_network = google_compute_network.main.self_link
     }
-
-    # Optional: storage_autoresize and disk_size settings can be set here
     availability_type = "ZONAL"
   }
-
-  # Optional: automated backups, maintenance_window, etc. can be added.
   deletion_protection = false
 }
 
 # Application database inside the instance
 resource "google_sql_database" "app_db" {
-  name     = var.db_name
-  instance = google_sql_database_instance.mysql.name
-  project  = var.project_id
-  charset  = "utf8mb4"
+  name      = var.db_name
+  instance  = google_sql_database_instance.mysql.name
+  project   = var.project_id
+  charset   = "utf8mb4"
   collation = "utf8mb4_unicode_ci"
 }
 
@@ -129,7 +132,7 @@ resource "google_secret_manager_secret" "db_app_password" {
   project   = var.project_id
 
   replication {
-    automatic = true
+    auto {}
   }
 }
 
@@ -174,12 +177,12 @@ output "cloudsql_app_password_secret" {
 # Marked sensitive so the secret value won't be shown in plain text in Terraform output.
 output "db_env" {
   description = "Contents of a .env file with DB connection info (sensitive)"
-  value = <<EOF
+  value       = <<EOF
 DB_USER=${google_sql_user.app_user.name}
 DB_NAME=${google_sql_database.app_db.name}
 DB_HOST=${google_sql_database_instance.mysql.ip_address[0].ip_address}
 DB_PORT=3306
 DB_PASSWORD=${random_password.db_app.result}
 EOF
-  sensitive = true
+  sensitive   = true
 }
