@@ -171,18 +171,3 @@ output "cloudsql_app_password_secret" {
   description = "Secret Manager resource name that holds the application DB password (secret version created)"
   value       = google_secret_manager_secret.db_app_password.name
 }
-
-# Combined .env content output for convenience — sensitive
-# Produces a small .env file text containing the DB credentials and host.
-# Marked sensitive so the secret value won't be shown in plain text in Terraform output.
-output "db_env" {
-  description = "Contents of a .env file with DB connection info (sensitive)"
-  value       = <<EOF
-DB_USER=${google_sql_user.app_user.name}
-DB_NAME=${google_sql_database.app_db.name}
-DB_HOST=${google_sql_database_instance.mysql.ip_address[0].ip_address}
-DB_PORT=3306
-DB_PASSWORD=${random_password.db_app.result}
-EOF
-  sensitive   = true
-}
