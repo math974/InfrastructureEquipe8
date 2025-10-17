@@ -188,7 +188,7 @@ resource "google_secret_manager_secret_version" "db_app_password_version" {
 # Outputs
 output "cloudsql_instance_name" {
   description = "Name of the Cloud SQL instance"
-  value       = google_sql_database_instance.mysql.name
+  value       = local.sql_instance_name
 }
 
 output "cloudsql_private_network_self_link" {
@@ -198,7 +198,7 @@ output "cloudsql_private_network_self_link" {
 
 output "cloudsql_reserved_peering_range" {
   description = "Reserved peering range name used for Private Service Access"
-  value       = google_compute_global_address.private_ip_address.name
+  value       = local.reserved_peering_range_name
 }
 
 output "cloudsql_database_name" {
@@ -212,6 +212,6 @@ output "cloudsql_app_user" {
 }
 
 output "cloudsql_app_password_secret" {
-  description = "Secret Manager resource name that holds the application DB password (secret version created)"
-  value       = google_secret_manager_secret.db_app_password.name
+  description = "Secret Manager resource identifier that holds the application DB password (imported or created)"
+  value       = local.secret_resource_id
 }
