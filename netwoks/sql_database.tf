@@ -50,8 +50,8 @@ resource "google_compute_global_address" "private_ip_address" {
 }
 
 resource "google_project_service" "servicenetworking_api" {
-  project = var.project_id
-  service = "servicenetworking.googleapis.com"
+  project                    = var.project_id
+  service                    = "servicenetworking.googleapis.com"
   disable_dependent_services = false
 }
 
@@ -101,7 +101,7 @@ resource "google_sql_database_instance" "mysql" {
     tier = var.db_tier
 
     ip_configuration {
-      ipv4_enabled = false
+      ipv4_enabled    = false
       private_network = google_compute_network.main.self_link
     }
     availability_type = "ZONAL"
