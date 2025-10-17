@@ -34,6 +34,24 @@ variable "private_ip_prefix_len" {
   default     = 16
 }
 
+variable "import_global_address" {
+  description = "If true, do not create the reserved global address; reference existing one via data source"
+  type        = bool
+  default     = false
+}
+
+variable "import_sql_instance" {
+  description = "If true, do not create the Cloud SQL instance; reference existing one via data source"
+  type        = bool
+  default     = false
+}
+
+variable "import_secret" {
+  description = "If true, do not create the Secret Manager secret; reference existing one via data source"
+  type        = bool
+  default     = false
+}
+
 resource "random_password" "db_app" {
   length           = 20
   override_special = "!@#$%&*()-_=+"
@@ -41,12 +59,38 @@ resource "random_password" "db_app" {
 }
 
 resource "google_compute_global_address" "private_ip_address" {
+  count         = var.import_global_address ? 0 : 1
   name          = "${var.instance_name}-private-ip-range"
   project       = var.project_id
   address_type  = "INTERNAL"
   purpose       = "VPC_PEERING"
   prefix_length = var.private_ip_prefix_len
   network       = google_compute_network.main.self_link
+}
+
+data "google_compute_global_address" "existing_private_ip" {
+  count   = var.import_global_address ? 1 : 0
+  name    = "${var.instance_name}-private-ip-range"
+  project = var.project_id
+}
+
+data "google_sql_database_instance" "existing_instance" {
+  count   = var.import_sql_instance ? 1 : 0
+  name    = var.instance_name
+  project = var.project_id
+}
+
+data "google_secret_manager_secret" "existing_secret" {
+  count     = var.import_secret ? 1 : 0
+  secret_id = "${var.instance_name}-app-db-password"
+  project   = var.project_id
+}
+
+# Locals to unify references: when importing we use data sources, otherwise resources
+locals {
+  reserved_peering_range_name = var.import_global_address ? data.google_compute_global_address.existing_private_ip[0].name : google_compute_global_address.private_ip_address[0].name
+  sql_instance_name           = var.import_sql_instance ? data.google_sql_database_instance.existing_instance[0].name : google_sql_database_instance.mysql[0].name
+  secret_resource_id          = var.import_secret ? data.google_secret_manager_secret.existing_secret[0].id : google_secret_manager_secret.db_app_password[0].id
 }
 
 resource "google_project_service" "servicenetworking_api" {
@@ -74,7 +118,7 @@ resource "google_service_networking_connection" "private_vpc_connection" {
   provider                = google
   network                 = google_compute_network.main.name
   service                 = "servicenetworking.googleapis.com"
-  reserved_peering_ranges = [google_compute_global_address.private_ip_address.name]
+  reserved_peering_ranges = [local.reserved_peering_range_name]
   depends_on = [
     google_project_service.servicenetworking_api,
     google_project_service.sqladmin_api,
@@ -84,10 +128,12 @@ resource "google_service_networking_connection" "private_vpc_connection" {
 }
 
 resource "google_sql_database_instance" "mysql" {
+  count            = var.import_sql_instance ? 0 : 1
   name             = var.instance_name
   project          = var.project_id
   region           = var.region
   database_version = var.db_version
+
   depends_on = [
     google_service_networking_connection.private_vpc_connection,
     google_compute_global_address.private_ip_address,
@@ -109,25 +155,23 @@ resource "google_sql_database_instance" "mysql" {
   deletion_protection = false
 }
 
-# Application database inside the instance
 resource "google_sql_database" "app_db" {
   name      = var.db_name
-  instance  = google_sql_database_instance.mysql.name
+  instance  = var.import_sql_instance ? local.sql_instance_name : google_sql_database_instance.mysql[0].name
   project   = var.project_id
   charset   = "utf8mb4"
   collation = "utf8mb4_unicode_ci"
 }
 
-# Create the application user on the instance
 resource "google_sql_user" "app_user" {
   name     = var.db_user
-  instance = google_sql_database_instance.mysql.name
+  instance = var.import_sql_instance ? local.sql_instance_name : google_sql_database_instance.mysql[0].name
   project  = var.project_id
   password = random_password.db_app.result
 }
 
-# Optionally store the application user password in Secret Manager
 resource "google_secret_manager_secret" "db_app_password" {
+  count     = var.import_secret ? 0 : 1
   secret_id = "${var.instance_name}-app-db-password"
   project   = var.project_id
 
@@ -137,7 +181,7 @@ resource "google_secret_manager_secret" "db_app_password" {
 }
 
 resource "google_secret_manager_secret_version" "db_app_password_version" {
-  secret      = google_secret_manager_secret.db_app_password.id
+  secret      = var.import_secret ? local.secret_resource_id : google_secret_manager_secret.db_app_password[0].id
   secret_data = random_password.db_app.result
 }
 
