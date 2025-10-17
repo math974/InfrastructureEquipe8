@@ -86,7 +86,6 @@ data "google_secret_manager_secret" "existing_secret" {
   project   = var.project_id
 }
 
-# Locals to unify references: when importing we use data sources, otherwise resources
 locals {
   reserved_peering_range_name = var.import_global_address ? data.google_compute_global_address.existing_private_ip[0].name : google_compute_global_address.private_ip_address[0].name
   sql_instance_name           = var.import_sql_instance ? data.google_sql_database_instance.existing_instance[0].name : google_sql_database_instance.mysql[0].name
@@ -112,6 +111,27 @@ resource "google_project_service" "secretmanager_api" {
 resource "google_project_service" "compute_api" {
   project = var.project_id
   service = "compute.googleapis.com"
+}
+
+resource "google_compute_router" "nat_router" {
+  name    = "${var.instance_name}-nat-router"
+  project = var.project_id
+  network = google_compute_network.main.self_link
+  region  = var.region
+}
+
+resource "google_compute_router_nat" "default_nat" {
+  name                               = "${var.instance_name}-nat"
+  project                            = var.project_id
+  router                             = google_compute_router.nat_router.name
+  region                             = var.region
+  nat_ip_allocate_option             = "AUTO_ONLY"
+  source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
+
+  log_config {
+    filter = "ALL"
+    enable = false
+  }
 }
 
 resource "google_service_networking_connection" "private_vpc_connection" {
@@ -185,7 +205,6 @@ resource "google_secret_manager_secret_version" "db_app_password_version" {
   secret_data = random_password.db_app.result
 }
 
-# Outputs
 output "cloudsql_instance_name" {
   description = "Name of the Cloud SQL instance"
   value       = local.sql_instance_name
