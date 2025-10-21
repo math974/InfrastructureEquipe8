@@ -17,7 +17,7 @@ kubernetes_config = {
   cluster_name       = "gke-dev-cluster"
   gke_num_nodes      = 1
   machine_type       = "e2-small"
-  kubernetes_version = "1.30.14-gke.1349000"
+  kubernetes_version = "1.31"
 }
 
 # Configuration IAM
