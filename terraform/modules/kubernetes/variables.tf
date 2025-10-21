@@ -49,7 +49,7 @@ variable "machine_type" {
 variable "kubernetes_version" {
   description = "Version de Kubernetes à utiliser"
   type        = string
-  default     = "1.27"
+  default     = "1.30"
 }
 
 variable "node_zones" {
