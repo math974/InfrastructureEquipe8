@@ -60,7 +60,10 @@ variable "roles" {
     "roles/storage.objectViewer",
     "roles/compute.admin",
     "roles/iam.serviceAccountUser",
+    "roles/secretmanager.admin",
     "roles/viewer",
+    "roles/cloudsql.admin",
+    "roles/compute.networkAdmin",
+    "roles/servicenetworking.networksAdmin",
   ]
 }
-

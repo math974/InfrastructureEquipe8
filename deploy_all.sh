@@ -51,7 +51,9 @@ main() {
 
   apply_envs_in_dir "${ROOT_DIR}/iam" "envs"
 
-  log "All environments deployed successfully for netwoks and iam."
+  apply_envs_in_dir "${ROOT_DIR}/kubernetes" "envs"
+
+  log "All environments deployed successfully for netwoks, iam, and kubernetes."
 }
 
 trap 'echo "ERROR: Script failed on line $LINENO" >&2' ERR

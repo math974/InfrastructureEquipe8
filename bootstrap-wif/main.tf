@@ -11,16 +11,20 @@ terraform {
   # Remote state backend (GCS).
   # Bucket and prefix are provided by the deploy scripts using -backend-config
   # for each environment/workspace (see configs/bootstrap-wif-dev.config and configs/bootstrap-wif-prd.config).
-  backend "gcs" {}
+  #backend "gcs" {}
 }
 
 data "google_project" "project" {
   project_id = var.project_id
 }
 
+resource "random_id" "pool_suffix" {
+  byte_length = 4
+}
+
 resource "google_iam_workload_identity_pool" "pool" {
   project      = var.project_id
-  workload_identity_pool_id = "${var.pool_id}-${var.environment}"
+  workload_identity_pool_id = "${var.pool_id}-${var.environment}-${random_id.pool_suffix.hex}"
   display_name = "GitHub Pool ${upper(var.environment)}"
   description  = "WIF pool for GitHub Actions - ${var.environment}"
 }
@@ -36,7 +40,7 @@ resource "google_iam_workload_identity_pool_provider" "provider" {
     "attribute.ref"        = "assertion.ref"
   }
   # Condition basée sur l'environnement et les branches autorisées
-  attribute_condition = length(var.allowed_branches) > 0 ? "attribute.repository == '${var.github_owner}/${var.github_repo}' && attribute.ref in [${join(", ", [for branch in var.allowed_branches : "'refs/heads/${branch}'"])}]" : "attribute.repository == '${var.github_owner}/${var.github_repo}'"
+  attribute_condition = "attribute.repository == '${var.github_owner}/${var.github_repo}'"
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"
   }
@@ -60,4 +64,3 @@ resource "google_service_account_iam_member" "wif_binding" {
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.pool.name}/attribute.repository/${var.github_owner}/${var.github_repo}"
 }
-
