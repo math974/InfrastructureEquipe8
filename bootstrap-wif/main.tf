@@ -23,10 +23,10 @@ resource "random_id" "pool_suffix" {
 }
 
 resource "google_iam_workload_identity_pool" "pool" {
-  project      = var.project_id
+  project                   = var.project_id
   workload_identity_pool_id = "${var.pool_id}-${var.environment}-${random_id.pool_suffix.hex}"
-  display_name = "GitHub Pool ${upper(var.environment)}"
-  description  = "WIF pool for GitHub Actions - ${var.environment}"
+  display_name              = "GitHub Pool ${upper(var.environment)}"
+  description               = "WIF pool for GitHub Actions - ${var.environment}"
 }
 
 resource "google_iam_workload_identity_pool_provider" "provider" {
