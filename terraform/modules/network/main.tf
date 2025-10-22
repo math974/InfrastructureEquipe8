@@ -32,7 +32,7 @@ resource "google_compute_subnetwork" "main" {
   # Ranges secondaires utilisées par GKE
   secondary_ip_range {
     range_name    = "services-range-2"
-    ip_cidr_range = "10.10.0.0/22"
+    ip_cidr_range = "10.10.0.0/20"
   }
 
   secondary_ip_range {
