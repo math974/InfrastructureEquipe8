@@ -117,7 +117,8 @@ resource "google_container_node_pool" "primary_nodes" {
 
   # Configuration des nœuds
   node_config {
-    machine_type = var.machine_type
+    machine_type    = var.machine_type
+    service_account = var.nodes_service_account_email
 
     # Labels Kubernetes
     labels = {
