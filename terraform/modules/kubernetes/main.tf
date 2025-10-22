@@ -35,7 +35,7 @@ resource "google_container_cluster" "primary" {
 
   # Configuration réseau avec plages secondaires
   ip_allocation_policy {
-    stack_type                    = "IPV4_IPV6"
+    stack_type                    = "IPV4"
     services_secondary_range_name = "services-range"
     cluster_secondary_range_name  = "pod-ranges"
   }
