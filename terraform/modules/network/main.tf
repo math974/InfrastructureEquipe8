@@ -29,6 +29,11 @@ resource "google_compute_subnetwork" "main" {
   stack_type       = "IPV4_IPV6"
   ipv6_access_type = "INTERNAL"
 
+  # Évite les tentatives de mise à jour des plages secondaires existantes (immutables côté GCP)
+  lifecycle {
+    ignore_changes = [secondary_ip_range]
+  }
+
   # Ranges secondaires utilisées par GKE
   secondary_ip_range {
     range_name    = "services-range-2"
