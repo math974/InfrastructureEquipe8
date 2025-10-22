@@ -76,6 +76,7 @@ variable "kubernetes_config" {
     gke_num_nodes      = optional(number, 1)
     machine_type       = optional(string, "e2-medium")
     kubernetes_version = optional(string, "1.27")
+    node_zones         = optional(list(string), [])
   })
   default = {}
 }

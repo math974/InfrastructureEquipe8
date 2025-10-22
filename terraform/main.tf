@@ -56,6 +56,7 @@ module "kubernetes" {
   gke_num_nodes               = var.kubernetes_config.gke_num_nodes
   machine_type                = var.kubernetes_config.machine_type
   kubernetes_version          = var.kubernetes_config.kubernetes_version
+  node_zones                  = var.kubernetes_config.node_zones
   nodes_service_account_email = module.iam.gke_nodes_service_account_email
 
   depends_on = [module.network, module.iam]
