@@ -52,10 +52,10 @@ module "kubernetes" {
   subnet_name  = module.network.subnet_name
 
   # Configuration Kubernetes
-  cluster_name       = var.kubernetes_config.cluster_name
-  gke_num_nodes      = var.kubernetes_config.gke_num_nodes
-  machine_type       = var.kubernetes_config.machine_type
-  kubernetes_version = var.kubernetes_config.kubernetes_version
+  cluster_name                = var.kubernetes_config.cluster_name
+  gke_num_nodes               = var.kubernetes_config.gke_num_nodes
+  machine_type                = var.kubernetes_config.machine_type
+  kubernetes_version          = var.kubernetes_config.kubernetes_version
   nodes_service_account_email = module.iam.gke_nodes_service_account_email
 
   depends_on = [module.network, module.iam]
