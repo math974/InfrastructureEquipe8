@@ -73,6 +73,31 @@ resource "google_container_cluster" "primary" {
 
   # Protection contre la suppression accidentelle
   deletion_protection = false
+
+  # Configuration des nœuds
+  node_config {
+    machine_type   = var.machine_type
+    service_account = var.nodes_service_account_email
+
+    # Labels Kubernetes
+    labels = {
+      env  = var.environment
+      pool = "application-pool"
+    }
+
+    # Métadonnées de sécurité
+    metadata = {
+      disable-legacy-endpoints = "true"
+    }
+
+    # Scopes OAuth pour les nœuds
+    oauth_scopes = [
+      "https://www.googleapis.com/auth/logging.write",
+      "https://www.googleapis.com/auth/monitoring",
+      "https://www.googleapis.com/auth/devstorage.read_only",
+      "https://www.googleapis.com/auth/cloud-platform"
+    ]
+  }
 }
 
 # Node pool pour le cluster

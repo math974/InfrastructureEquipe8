@@ -58,3 +58,7 @@ variable "node_zones" {
   default     = ["europe-west9-a", "europe-west9-b", "europe-west9-c"]
 }
 
+variable "nodes_service_account_email" {
+  description = "Service Account email for GKE nodes"
+  type        = string
+}

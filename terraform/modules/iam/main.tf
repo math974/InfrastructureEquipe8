@@ -57,3 +57,47 @@ resource "google_project_iam_member" "service_account_user" {
   role    = "roles/iam.serviceAccountUser"
   member  = "user:${var.user_email}"
 }
+
+# Service Account pour les nœuds GKE
+resource "google_service_account" "gke_nodes" {
+  project      = var.project_id
+  account_id   = "gke-nodes-${var.environment}"
+  display_name = "GKE Nodes ${upper(var.environment)}"
+}
+
+# Rôles nécessaires pour le SA des nœuds
+resource "google_project_iam_member" "gke_nodes_logging" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.gke_nodes.email}"
+}
+
+resource "google_project_iam_member" "gke_nodes_monitoring" {
+  project = var.project_id
+  role    = "roles/monitoring.metricWriter"
+  member  = "serviceAccount:${google_service_account.gke_nodes.email}"
+}
+
+resource "google_project_iam_member" "gke_nodes_storage" {
+  project = var.project_id
+  role    = "roles/storage.objectViewer"
+  member  = "serviceAccount:${google_service_account.gke_nodes.email}"
+}
+
+resource "google_project_iam_member" "gke_nodes_artifactregistry" {
+  project = var.project_id
+  role    = "roles/artifactregistry.reader"
+  member  = "serviceAccount:${google_service_account.gke_nodes.email}"
+}
+
+resource "google_project_iam_member" "gke_nodes_sa_user" {
+  project = var.project_id
+  role    = "roles/iam.serviceAccountUser"
+  member  = "serviceAccount:${google_service_account.gke_nodes.email}"
+}
+
+# Output email SA nœuds
+output "gke_nodes_service_account_email" {
+  description = "Email du service account utilisé par les nœuds GKE"
+  value       = google_service_account.gke_nodes.email
+}

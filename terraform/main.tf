@@ -37,6 +37,8 @@ module "iam" {
   auto_invite_missing_users = var.auto_invite_missing_users
   billing_account_id        = var.billing_account_id
   user_email                = var.user_email
+  region                    = var.region
+  environment               = var.environment
 }
 
 # Module Kubernetes (dépend du réseau et des permissions IAM)
@@ -54,6 +56,7 @@ module "kubernetes" {
   gke_num_nodes      = var.kubernetes_config.gke_num_nodes
   machine_type       = var.kubernetes_config.machine_type
   kubernetes_version = var.kubernetes_config.kubernetes_version
+  nodes_service_account_email = module.iam.gke_nodes_service_account_email
 
   depends_on = [module.network, module.iam]
 }
