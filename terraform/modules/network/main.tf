@@ -32,11 +32,11 @@ resource "google_compute_subnetwork" "main" {
   # Plages secondaires pour les pods et services Kubernetes
   secondary_ip_range {
     range_name    = "services-range"
-    ip_cidr_range = "192.168.0.0/24"
+    ip_cidr_range = "10.10.0.0/22"
   }
 
   secondary_ip_range {
     range_name    = "pod-ranges"
-    ip_cidr_range = "192.168.1.0/24"
+    ip_cidr_range = "10.20.0.0/20"
   }
 }

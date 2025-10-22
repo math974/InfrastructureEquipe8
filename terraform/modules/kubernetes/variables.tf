@@ -55,10 +55,16 @@ variable "kubernetes_version" {
 variable "node_zones" {
   description = "Liste des zones pour les nœuds du cluster"
   type        = list(string)
-  default     = ["europe-west9-a", "europe-west9-b", "europe-west9-c"]
+  default     = ["europe-west9-a"]
 }
 
 variable "nodes_service_account_email" {
   description = "Service Account email for GKE nodes"
   type        = string
+}
+
+variable "max_pods_per_node" {
+  description = "Nombre maximum de pods par nœud"
+  type        = number
+  default     = 32
 }

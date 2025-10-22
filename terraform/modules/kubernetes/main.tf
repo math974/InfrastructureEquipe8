@@ -139,6 +139,9 @@ resource "google_container_node_pool" "primary_nodes" {
     ]
   }
 
+  # Limiter le nombre de pods par nœud
+  max_pods_per_node = var.max_pods_per_node
+
   # Configuration de mise à l'échelle progressive
   upgrade_settings {
     max_surge       = 1
