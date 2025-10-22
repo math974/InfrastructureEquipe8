@@ -29,18 +29,7 @@ resource "google_compute_subnetwork" "main" {
   stack_type       = "IPV4_IPV6"
   ipv6_access_type = "INTERNAL"
 
-  # Plages secondaires pour les pods et services Kubernetes
-  secondary_ip_range {
-    range_name    = "services-range"
-    ip_cidr_range = "192.168.0.0/24"
-  }
-
-  secondary_ip_range {
-    range_name    = "pod-ranges"
-    ip_cidr_range = "192.168.1.0/24"
-  }
-
-  # Ranges additionnelles pour capacité accrue sans modifier les existantes
+  # Ranges secondaires utilisées par GKE
   secondary_ip_range {
     range_name    = "services-range-2"
     ip_cidr_range = "10.10.0.0/22"

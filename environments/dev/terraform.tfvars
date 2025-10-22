@@ -2,7 +2,7 @@
 
 # Configuration de base
 project_id  = "caramel-abacus-472612-h3"
-region      = "europe-west9"
+region      = "europe-west1"
 environment = "dev"
 user_email  = "mathias.ballot974@gmail.com"
 
@@ -18,6 +18,7 @@ kubernetes_config = {
   gke_num_nodes      = 1
   machine_type       = "e2-small"
   kubernetes_version = "1.31"
+  node_zones         = ["europe-west1-b"]
 }
 
 # Configuration IAM

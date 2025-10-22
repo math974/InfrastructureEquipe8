@@ -36,8 +36,8 @@ resource "google_container_cluster" "primary" {
   # Configuration réseau avec plages secondaires
   ip_allocation_policy {
     stack_type                    = "IPV4"
-    services_secondary_range_name = "services-range"
-    cluster_secondary_range_name  = "pod-ranges"
+    services_secondary_range_name = "services-range-2"
+    cluster_secondary_range_name  = "pod-ranges-2"
   }
 
   # Configuration de la version Kubernetes
