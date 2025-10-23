@@ -64,19 +64,19 @@ resource "google_compute_global_address" "private_ip_address" {
 }
 
 data "google_compute_global_address" "existing_private_ip" {
-  count = var.bootstrap ? 1 : try(tobool(data.external.check_global_address.result.exists), false) ? 1 : 0
+  count   = var.bootstrap ? 1 : try(tobool(data.external.check_global_address.result.exists), false) ? 1 : 0
   name    = "${var.instance_name}-private-ip-range"
   project = var.project_id
 }
 
 data "google_sql_database_instance" "existing_instance" {
-  count = var.bootstrap ? 1 : try(tobool(data.external.check_sql_instance.result.exists), false) ? 1 : 0
+  count   = var.bootstrap ? 1 : try(tobool(data.external.check_sql_instance.result.exists), false) ? 1 : 0
   name    = var.instance_name
   project = var.project_id
 }
 
 data "google_secret_manager_secret" "existing_secret" {
-  count = var.bootstrap ? 1 : try(tobool(data.external.check_secret.result.exists), false) ? 1 : 0
+  count     = var.bootstrap ? 1 : try(tobool(data.external.check_secret.result.exists), false) ? 1 : 0
   secret_id = "${var.instance_name}-app-db-password"
   project   = var.project_id
 }
@@ -93,7 +93,7 @@ locals {
 }
 
 resource "google_service_networking_connection" "private_vpc_connection" {
-  count                   = local.connection_exists ? 0 : 1
+  count                   = var.bootstrap ? 1 : (local.connection_exists ? 0 : 1)
   provider                = google
   network                 = "projects/${var.project_id}/global/networks/${var.network_name}"
   service                 = "servicenetworking.googleapis.com"
@@ -176,7 +176,7 @@ resource "google_sql_user" "app_user" {
 }
 
 resource "google_secret_manager_secret" "db_app_password" {
-  count = var.bootstrap ? 1 : (local.secret_exists ? 0 : 1)
+  count     = var.bootstrap ? 1 : (local.secret_exists ? 0 : 1)
   secret_id = "${var.instance_name}-app-db-password"
   project   = var.project_id
 
