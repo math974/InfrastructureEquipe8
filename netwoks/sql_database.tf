@@ -135,8 +135,9 @@ resource "google_compute_router_nat" "default_nat" {
 }
 
 resource "google_service_networking_connection" "private_vpc_connection" {
-  network                 = google_compute_network.main.self_link
-  service                 = "servicenetworking.googleapis.com"
+  count                  = var.import_global_address ? 0 : 1
+  network                = google_compute_network.main.self_link
+  service                = "servicenetworking.googleapis.com"
   reserved_peering_ranges = [local.reserved_peering_range_name]
 
   depends_on = [
@@ -145,6 +146,19 @@ resource "google_service_networking_connection" "private_vpc_connection" {
     google_project_service.secretmanager_api,
     google_project_service.compute_api,
   ]
+}
+
+data "google_service_networking_connection" "existing_private_vpc_connection" {
+  count   = var.import_global_address ? 1 : 0
+  network = google_compute_network.main.self_link
+  service = "servicenetworking.googleapis.com"
+}
+
+locals {
+  reserved_peering_range_name = var.import_global_address ? (length(data.google_compute_global_address.existing_private_ip) > 0 ? data.google_compute_global_address.existing_private_ip[0].name : null) : (length(google_compute_global_address.private_ip_address) > 0 ? google_compute_global_address.private_ip_address[0].name : null)
+  sql_instance_name  = var.import_sql_instance ? (length(data.google_sql_database_instance.existing_instance) > 0 ? data.google_sql_database_instance.existing_instance[0].name : var.instance_name) : var.instance_name
+  secret_resource_id = var.import_secret ? (length(data.google_secret_manager_secret.existing_secret) > 0 ? data.google_secret_manager_secret.existing_secret[0].id : null) : (length(google_secret_manager_secret.db_app_password) > 0 ? google_secret_manager_secret.db_app_password[0].id : null)
+  private_vpc_connection_id = var.import_global_address ? (length(data.google_service_networking_connection.existing_private_vpc_connection) > 0 ? data.google_service_networking_connection.existing_private_vpc_connection[0].id : null) : (length(google_service_networking_connection.private_vpc_connection) > 0 ? google_service_networking_connection.private_vpc_connection[0].id : null)
 }
 
 resource "google_sql_database_instance" "mysql" {
