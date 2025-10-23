@@ -56,6 +56,7 @@ module "database" {
   db_tier               = var.database_config.db_tier
   db_version            = var.database_config.db_version
   private_ip_prefix_len = var.database_config.private_ip_prefix_len
+  bootstrap             = var.bootstrap
 
 
   depends_on = [module.network]
