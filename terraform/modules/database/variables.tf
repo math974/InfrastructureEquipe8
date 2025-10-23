@@ -53,9 +53,3 @@ variable "private_ip_prefix_len" {
   type        = number
   default     = 16
 }
-
-variable "bootstrap" {
-  description = "Set to true only on the first apply to skip existence checks."
-  type        = bool
-  default     = false
-}
