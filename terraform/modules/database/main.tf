@@ -147,6 +147,10 @@ resource "google_sql_database" "app_db" {
   charset   = "utf8mb4"
   collation = "utf8mb4_unicode_ci"
 
+  depends_on = [
+    google_sql_database_instance.mysql
+  ]
+
   # lifecycle {
   #   prevent_destroy = true
   # }
@@ -157,6 +161,10 @@ resource "google_sql_user" "app_user" {
   instance = local.sql_instance_name
   project  = var.project_id
   password = random_password.db_app.result
+
+  depends_on = [
+    google_sql_database_instance.mysql
+  ]
 }
 
 resource "google_secret_manager_secret" "db_app_password" {
