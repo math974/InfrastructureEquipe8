@@ -3,4 +3,3 @@ environment      = "dev"
 github_owner     = "math974"
 github_repo      = "InfrastructureEquipe8"
 allowed_branches = ["*", "!main"]
-

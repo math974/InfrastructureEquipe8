@@ -81,6 +81,19 @@ variable "kubernetes_config" {
   default = {}
 }
 
+variable "database_config" {
+  description = "Configuration spécifique pour la base de données Cloud SQL"
+  type = object({
+    instance_name         = optional(string, "tasks-mysql")
+    db_name               = optional(string, "tasksdb")
+    db_user               = optional(string, "tasks_app")
+    db_tier               = optional(string, "db-f1-micro")
+    db_version            = optional(string, "MYSQL_8_0")
+    private_ip_prefix_len = optional(number, 16)
+  })
+  default = {}
+}
+
 variable "network_config" {
   description = "Configuration spécifique pour le réseau"
   type = object({

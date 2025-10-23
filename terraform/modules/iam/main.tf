@@ -96,6 +96,20 @@ resource "google_project_iam_member" "gke_nodes_sa_user" {
   member  = "serviceAccount:${google_service_account.gke_nodes.email}"
 }
 
+# Accès aux secrets (Secret Manager) pour les pods via le SA des nœuds
+resource "google_project_iam_member" "gke_nodes_secretmanager" {
+  project = var.project_id
+  role    = "roles/secretmanager.secretAccessor"
+  member  = "serviceAccount:${google_service_account.gke_nodes.email}"
+}
+
+# Accès Cloud SQL Client si vous utilisez le Cloud SQL Auth Proxy
+resource "google_project_iam_member" "gke_nodes_cloudsql_client" {
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.gke_nodes.email}"
+}
+
 # Output email SA nœuds
 output "gke_nodes_service_account_email" {
   description = "Email du service account utilisé par les nœuds GKE"

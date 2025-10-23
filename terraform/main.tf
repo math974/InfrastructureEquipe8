@@ -41,7 +41,27 @@ module "iam" {
   environment               = var.environment
 }
 
-# Module Kubernetes (dépend du réseau et des permissions IAM)
+# Module Database (dépend du réseau)
+module "database" {
+  source = "./modules/database"
+
+  project_id        = var.project_id
+  region            = var.region
+  network_self_link = module.network.network_self_link
+  network_name      = module.network.network_name
+
+  instance_name         = var.database_config.instance_name
+  db_name               = var.database_config.db_name
+  db_user               = var.database_config.db_user
+  db_tier               = var.database_config.db_tier
+  db_version            = var.database_config.db_version
+  private_ip_prefix_len = var.database_config.private_ip_prefix_len
+
+
+  depends_on = [module.network]
+}
+
+# Module Kubernetes (dépend du réseau, IAM et base de données)
 module "kubernetes" {
   source = "./modules/kubernetes"
 
@@ -59,5 +79,5 @@ module "kubernetes" {
   node_zones                  = var.kubernetes_config.node_zones
   nodes_service_account_email = module.iam.gke_nodes_service_account_email
 
-  depends_on = [module.network, module.iam]
+  depends_on = [module.network, module.iam, module.database]
 }

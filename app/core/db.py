@@ -1,13 +1,24 @@
 from __future__ import annotations
 
 import os
-import sqlite3
 import json
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+from contextlib import contextmanager
+from dotenv import load_dotenv
+
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
+
+# Connection configuration: prefer full URL, otherwise build from env
+# Expected env vars:
+#   DATABASE_URL or (DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME)
+# DB driver used: pymysql via SQLAlchemy -> "mysql+pymysql://..."
+# The application code uses DB-API style connections (cursor(), commit()), so get_db yields a DB-API connection.
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
-DB_PATH = os.path.join(BASE_DIR, "tasks.db")
+# Load environment variables from app/.env (if present)
+load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 
 def iso_utc_now() -> str:
@@ -50,102 +61,170 @@ def normalize_rfc3339(dt: datetime) -> str:
     return to_utc(dt).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def get_db() -> sqlite3.Connection:
+def _build_engine() -> Engine:
+    # Allow overriding with full DATABASE_URL
+    db_url = os.getenv("DATABASE_URL")
+    if db_url:
+        return create_engine(db_url, pool_pre_ping=True)
+
+    user = os.getenv("DB_USER", "root")
+    password = os.getenv("DB_PASSWORD", "")
+    host = os.getenv("DB_HOST", "127.0.0.1")
+    port = os.getenv("DB_PORT", "3306")
+    db = os.getenv("DB_NAME", "tasksdb")
+
+    # Using pymysql driver
+    url = f"mysql+pymysql://{user}:{password}@{host}:{port}/{db}?charset=utf8mb4"
+    return create_engine(url, pool_pre_ping=True, pool_recycle=3600)
+
+
+# Module-level engine
+_engine = _build_engine()
+
+
+@contextmanager
+def get_db():
     """
-    Open a new SQLite connection with Row factory enabled.
-    Callers are responsible for closing/committing (use context manager recommended).
+    Context manager that yields a raw DB-API connection (so calling code that uses
+    `with get_db() as conn:` and then `cur = conn.cursor()` still works).
+    The returned connection must be closed by this context manager.
     """
-    conn = sqlite3.connect(DB_PATH, detect_types=sqlite3.PARSE_DECLTYPES)
-    conn.row_factory = sqlite3.Row
-    return conn
+    raw_conn = _engine.raw_connection()
+    try:
+        yield raw_conn
+    finally:
+        try:
+            raw_conn.close()
+        except Exception:
+            pass
 
 
 def init_db() -> None:
     """
-    Initialize the database schema if it doesn't exist.
-    Creates indices and a UNIQUE constraint to prevent duplicate tasks
-    for the same (title, due_date) pair.
-    Also creates scheduled_ops table for deferred operations.
+    Initialize the MySQL schema if it doesn't exist.
+    Uses DDL statements compatible with MySQL.
+    Note: takes the environment-configured DB and runs CREATE TABLE IF NOT EXISTS.
     """
-    with get_db() as conn:
-        cur = conn.cursor()
-        # Tasks table
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS tasks (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL,
-                content TEXT,
-                due_date TEXT,
-                done INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                last_request_ts TEXT NOT NULL,
-                UNIQUE(title, due_date)
+    # We use an engine-level connection for DDL
+    with _engine.begin() as conn:
+        # Using VARCHAR for RFC3339 timestamps to keep compatibility with existing code
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS tasks (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    title VARCHAR(255) NOT NULL,
+                    content TEXT,
+                    due_date VARCHAR(10),
+                    done TINYINT NOT NULL DEFAULT 0,
+                    created_at VARCHAR(32) NOT NULL,
+                    updated_at VARCHAR(32) NOT NULL,
+                    last_request_ts VARCHAR(32) NOT NULL,
+                    UNIQUE KEY ux_tasks_title_due (title, due_date)
+                )
+                """
             )
-            """
         )
-        cur.execute("CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date)")
-        cur.execute(
-            "CREATE INDEX IF NOT EXISTS idx_tasks_updated_at ON tasks(updated_at)"
+        conn.execute(
+            text("CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date)")
+        )
+        conn.execute(
+            text("CREATE INDEX IF NOT EXISTS idx_tasks_updated_at ON tasks(updated_at)")
         )
 
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT NOT NULL UNIQUE,
-                email TEXT UNIQUE,
-                password_hash TEXT NOT NULL,
-                is_active INTEGER NOT NULL DEFAULT 1,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS users (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    username VARCHAR(255) NOT NULL UNIQUE,
+                    email VARCHAR(255),
+                    password_hash VARCHAR(255) NOT NULL,
+                    is_active TINYINT NOT NULL DEFAULT 1,
+                    created_at VARCHAR(32) NOT NULL,
+                    updated_at VARCHAR(32) NOT NULL
+                )
+                """
             )
-            """
         )
-        cur.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
-        cur.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
+        conn.execute(
+            text("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
+        )
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)"))
 
-        # New table for scheduled operations
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS scheduled_ops (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                task_id INTEGER,
-                op_type TEXT NOT NULL, -- 'update' or 'delete'
-                payload TEXT NOT NULL, -- JSON payload for the op
-                execute_at TEXT NOT NULL, -- RFC3339 execute timestamp (UTC)
-                request_ts TEXT NOT NULL, -- original request timestamp (RFC3339, UTC)
-                created_at TEXT NOT NULL
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS scheduled_ops (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    task_id INT,
+                    op_type VARCHAR(32) NOT NULL,
+                    payload TEXT NOT NULL,
+                    execute_at VARCHAR(32) NOT NULL,
+                    request_ts VARCHAR(32) NOT NULL,
+                    created_at VARCHAR(32) NOT NULL
+                )
+                """
             )
-            """
         )
-        cur.execute(
-            "CREATE INDEX IF NOT EXISTS idx_schedops_execute_at ON scheduled_ops(execute_at)"
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS idx_schedops_execute_at ON scheduled_ops(execute_at)"
+            )
         )
-        conn.commit()
 
 
-def row_to_task(row: sqlite3.Row) -> Dict[str, Any]:
+def _row_to_dict(cursor, row) -> Dict[str, Any]:
     """
-    Convert a sqlite3.Row from the tasks table into a serializable dict.
-    Note: due_date is kept as a string (YYYY-MM-DD); Pydantic models can coerce it to date.
+    Convert a DB-API row (tuple) into a dict using cursor.description.
+    If row is already a mapping-like object, return as dict.
     """
+    if row is None:
+        return None
+    # If row supports keys() and __getitem__ with strings, try to use it directly
+    try:
+        if hasattr(row, "keys"):
+            return {k: row[k] for k in row.keys()}
+    except Exception:
+        pass
+
+    # Fallback: use cursor.description to build keys
+    desc = [col[0] for col in cursor.description]
+    return {k: v for k, v in zip(desc, row)}
+
+
+def row_to_task(row: Any) -> Dict[str, Any]:
+    """
+    Convert a DB row (mapping-like or tuple with cursor) into the serializable dict.
+    Keeps due_date as a string (YYYY-MM-DD) like before.
+    """
+    if row is None:
+        return None
+    if isinstance(row, dict):
+        src = row
+    else:
+        # If it's a DB-API row proxy from some adapters, try mapping access
+        try:
+            src = dict(row)
+        except Exception:
+            # As a last resort, caller should supply mapping; raise to highlight mismatch
+            raise TypeError("Unsupported row type for row_to_task")
     return {
-        "id": row["id"],
-        "title": row["title"],
-        "content": row["content"],
-        "due_date": row["due_date"],
-        "done": bool(row["done"]),
-        "created_at": row["created_at"],
-        "updated_at": row["updated_at"],
+        "id": src.get("id"),
+        "title": src.get("title"),
+        "content": src.get("content"),
+        "due_date": src.get("due_date"),
+        "done": bool(int(src.get("done"))) if src.get("done") is not None else False,
+        "created_at": src.get("created_at"),
+        "updated_at": src.get("updated_at"),
     }
 
 
 # New helpers for scheduled operations
 
+
 def enqueue_scheduled_op(
-    conn: sqlite3.Connection,
+    conn,
     task_id: Optional[int],
     op_type: str,
     payload: Dict[str, Any],
@@ -154,33 +233,42 @@ def enqueue_scheduled_op(
 ) -> int:
     """
     Insert a scheduled operation and return its id.
+    Expects `conn` to be a DB-API connection (obtained from get_db()).
     """
     cur = conn.cursor()
     now_iso = iso_utc_now()
     cur.execute(
         """
         INSERT INTO scheduled_ops (task_id, op_type, payload, execute_at, request_ts, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s)
         """,
         (task_id, op_type, json.dumps(payload), execute_at, request_ts, now_iso),
     )
-    op_id = cur.lastrowid
+    op_id = cur.lastrowid if hasattr(cur, "lastrowid") else None
     conn.commit()
     return op_id
 
 
-def fetch_due_scheduled_ops(conn: sqlite3.Connection, upto_iso: str) -> List[sqlite3.Row]:
+def fetch_due_scheduled_ops(conn, upto_iso: str) -> List[Dict[str, Any]]:
     """
     Fetch scheduled operations with execute_at <= upto_iso.
+    Returns list of dicts.
     """
     cur = conn.cursor()
-    cur.execute("SELECT * FROM scheduled_ops WHERE execute_at <= ? ORDER BY execute_at ASC", (upto_iso,))
-    return cur.fetchall()
+    cur.execute(
+        "SELECT * FROM scheduled_ops WHERE execute_at <= %s ORDER BY execute_at ASC",
+        (upto_iso,),
+    )
+    rows = cur.fetchall()
+    results = []
+    for r in rows:
+        results.append(_row_to_dict(cur, r))
+    return results
 
 
-def delete_scheduled_op(conn: sqlite3.Connection, op_id: int) -> None:
+def delete_scheduled_op(conn, op_id: int) -> None:
     cur = conn.cursor()
-    cur.execute("DELETE FROM scheduled_ops WHERE id = ?", (op_id,))
+    cur.execute("DELETE FROM scheduled_ops WHERE id = %s", (op_id,))
     conn.commit()
 
 
@@ -197,38 +285,42 @@ def process_due_scheduled_ops_once() -> int:
         due_ops = fetch_due_scheduled_ops(conn, now_iso)
         for op in due_ops:
             try:
-                op_id = op["id"]
-                task_id = op["task_id"]
-                op_type = op["op_type"]
-                payload = json.loads(op["payload"])
-                req_ts = parse_rfc3339(op["request_ts"])
+                op_id = op.get("id")
+                task_id = op.get("task_id")
+                op_type = op.get("op_type")
+                payload = json.loads(op.get("payload", "{}"))
+                req_ts = parse_rfc3339(op.get("request_ts"))
 
-                # For update/delete, check resource exists (for update we still allow applying if exists)
-                cur.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
+                # For update/delete, check resource exists
+                cur.execute("SELECT * FROM tasks WHERE id = %s", (task_id,))
                 row = cur.fetchone()
-                if not row:
+                task_row = _row_to_dict(cur, row) if row is not None else None
+                if not task_row:
                     # Nothing to apply; remove scheduled op
                     delete_scheduled_op(conn, op_id)
                     continue
 
-                stored_last_ts = parse_rfc3339(row["last_request_ts"])
+                stored_last_ts = parse_rfc3339(task_row.get("last_request_ts"))
                 if not (req_ts > stored_last_ts):
                     # Conflict at execution time; drop the scheduled op
                     delete_scheduled_op(conn, op_id)
                     continue
 
                 if op_type == "update":
-                    # Build updated values (payload contains fields like title, content, due_date, done)
-                    new_title = payload.get("title", row["title"])
-                    new_content = payload.get("content", row["content"])
-                    new_due_date = payload.get("due_date", row["due_date"])
-                    new_done = int(payload.get("done")) if payload.get("done") is not None else row["done"]
+                    new_title = payload.get("title", task_row.get("title"))
+                    new_content = payload.get("content", task_row.get("content"))
+                    new_due_date = payload.get("due_date", task_row.get("due_date"))
+                    new_done = (
+                        int(payload.get("done"))
+                        if payload.get("done") is not None
+                        else int(task_row.get("done", 0))
+                    )
                     now_iso_local = iso_utc_now()
                     cur.execute(
                         """
                         UPDATE tasks
-                        SET title = ?, content = ?, due_date = ?, done = ?, updated_at = ?, last_request_ts = ?
-                        WHERE id = ?
+                        SET title = %s, content = %s, due_date = %s, done = %s, updated_at = %s, last_request_ts = %s
+                        WHERE id = %s
                         """,
                         (
                             new_title,
@@ -236,26 +328,24 @@ def process_due_scheduled_ops_once() -> int:
                             new_due_date,
                             new_done,
                             now_iso_local,
-                            op["request_ts"],
+                            op.get("request_ts"),
                             task_id,
                         ),
                     )
                     conn.commit()
-                    # remove op
                     delete_scheduled_op(conn, op_id)
                     processed += 1
                 elif op_type == "delete":
-                    cur.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+                    cur.execute("DELETE FROM tasks WHERE id = %s", (task_id,))
                     conn.commit()
                     delete_scheduled_op(conn, op_id)
                     processed += 1
                 else:
-                    # Unknown op type; remove it to avoid looping
                     delete_scheduled_op(conn, op_id)
             except Exception:
                 # On any exception while processing an op, remove it to avoid retries/leaks
                 try:
-                    delete_scheduled_op(conn, op["id"])
+                    delete_scheduled_op(conn, op.get("id"))
                 except Exception:
                     pass
                 continue
@@ -263,7 +353,6 @@ def process_due_scheduled_ops_once() -> int:
 
 
 __all__ = [
-    "DB_PATH",
     "get_db",
     "init_db",
     "row_to_task",

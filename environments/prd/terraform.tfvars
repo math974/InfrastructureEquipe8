@@ -21,6 +21,16 @@ kubernetes_config = {
   node_zones         = ["europe-west1-b"]
 }
 
+# Configuration Base de Données (Cloud SQL)
+database_config = {
+  instance_name         = "tasks-mysql-prd"
+  db_name               = "tasksdb"
+  db_user               = "tasks_app"
+  db_tier               = "db-f1-micro"
+  db_version            = "MYSQL_8_0"
+  private_ip_prefix_len = 16
+}
+
 # Configuration IAM
 team_member_emails = [
   "arnassalomlucas@gmail.com",
