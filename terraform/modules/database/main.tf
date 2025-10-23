@@ -39,7 +39,7 @@ resource "google_project_service" "compute_api" {
 }
 
 data "external" "check_service_networking_connection" {
-  program = ["bash", "-lc", "gcloud services vpc-peerings list --network=projects/${var.project_id}/global/networks/${var.network_name} --project=${var.project_id} --filter='service:servicenetworking.googleapis.com AND state:ACTIVE' --format=json | jq -e '.[] | select(.service == \"servicenetworking.googleapis.com\")' >/dev/null 2>&1 && echo '{\"exists\":\"true\"}' || echo '{\"exists\":\"false\"}'"]
+  program = ["bash", "-lc", "gcloud services vpc-peerings list --network=projects/${var.project_id}/global/networks/${var.network_name} --project=${var.project_id} --filter='service:servicenetworking.googleapis.com' --format=json | jq -e 'length > 0' >/dev/null 2>&1 && echo '{\"exists\":\"true\"}' || echo '{\"exists\":\"false\"}'"]
 }
 
 resource "google_compute_global_address" "private_ip_address" {
@@ -59,12 +59,13 @@ locals {
   connection_exists = try(tobool(data.external.check_service_networking_connection.result.exists), false)
 }
 
-# Créer la connexion Service Networking (gère les conflits automatiquement)
+# Créer la connexion Service Networking avec gestion des conflits
 resource "google_service_networking_connection" "private_vpc_connection" {
   provider                = google
   network                 = "projects/${var.project_id}/global/networks/${var.network_name}"
   service                 = "servicenetworking.googleapis.com"
   reserved_peering_ranges = [google_compute_global_address.private_ip_address.name]
+  update_on_creation_fail = true
 
   depends_on = [
     google_compute_global_address.private_ip_address,
@@ -73,11 +74,6 @@ resource "google_service_networking_connection" "private_vpc_connection" {
     google_project_service.secretmanager_api,
     google_project_service.compute_api,
   ]
-
-  # Gérer les conflits avec les connexions existantes
-  lifecycle {
-    ignore_changes = [reserved_peering_ranges]
-  }
 }
 
 
