@@ -23,16 +23,16 @@ kubernetes_config = {
 
 # Configuration Base de Données (Cloud SQL)
 database_config = {
-  instance_name         = "tasks-mysql"
-  db_name               = "tasksdb"
-  db_user               = "tasks_app"
-  db_tier               = "db-f1-micro"
-  db_version            = "MYSQL_8_0"
-  private_ip_prefix_len = 16
-  import_global_address = false
-  import_sql_instance   = false
-  import_secret         = false
-  import_service_networking_connection = true
+  instance_name                        = "tasks-mysql"
+  db_name                              = "tasksdb"
+  db_user                              = "tasks_app"
+  db_tier                              = "db-f1-micro"
+  db_version                           = "MYSQL_8_0"
+  private_ip_prefix_len                = 16
+  import_global_address                = false
+  import_sql_instance                  = false
+  import_secret                        = true
+  import_service_networking_connection = false
 }
 
 # Configuration IAM
