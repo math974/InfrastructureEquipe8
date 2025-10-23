@@ -133,7 +133,7 @@ resource "google_sql_database_instance" "mysql" {
     }
     availability_type = "ZONAL"
   }
-  deletion_protection = true
+  deletion_protection = false
 
   # lifecycle {
   #   prevent_destroy = true
