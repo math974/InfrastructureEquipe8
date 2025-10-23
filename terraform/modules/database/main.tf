@@ -150,6 +150,10 @@ resource "google_sql_database" "app_db" {
   # lifecycle {
   #   prevent_destroy = true
   # }
+
+  depends_on = [
+    google_sql_database_instance.mysql
+  ]
 }
 
 resource "google_sql_user" "app_user" {
@@ -157,6 +161,11 @@ resource "google_sql_user" "app_user" {
   instance = local.sql_instance_name
   project  = var.project_id
   password = random_password.db_app.result
+
+  depends_on = [
+    google_sql_database_instance.mysql,
+    google_sql_database.app_db
+  ]
 }
 
 resource "google_secret_manager_secret" "db_app_password" {
