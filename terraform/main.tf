@@ -57,7 +57,6 @@ module "database" {
   db_version            = var.database_config.db_version
   private_ip_prefix_len = var.database_config.private_ip_prefix_len
 
-
   depends_on = [module.network]
 }
 
