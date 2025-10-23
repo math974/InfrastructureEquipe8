@@ -72,4 +72,10 @@ variable "import_secret" {
   default     = false
 }
 
+variable "import_service_networking_connection" {
+  description = "If true, do not create Service Networking Connection; assume it already exists"
+  type        = bool
+  default     = false
+}
+
 

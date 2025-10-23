@@ -29,9 +29,10 @@ database_config = {
   db_tier               = "db-f1-micro"
   db_version            = "MYSQL_8_0"
   private_ip_prefix_len = 16
-  import_global_address = false
+  import_global_address = true
   import_sql_instance   = false
   import_secret         = false
+  import_service_networking_connection = true
 }
 
 # Configuration IAM

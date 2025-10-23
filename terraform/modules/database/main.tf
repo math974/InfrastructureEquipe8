@@ -62,6 +62,7 @@ locals {
 ## NAT déplacé vers le module réseau
 
 resource "google_service_networking_connection" "private_vpc_connection" {
+  count                   = var.import_service_networking_connection ? 0 : 1
   provider                = google
   network                 = "projects/${var.project_id}/global/networks/${var.network_name}"
   service                 = "servicenetworking.googleapis.com"
@@ -81,14 +82,16 @@ resource "google_sql_database_instance" "mysql" {
   region           = var.region
   database_version = var.db_version
 
-  depends_on = [
-    google_service_networking_connection.private_vpc_connection,
-    google_compute_global_address.private_ip_address,
-    google_project_service.servicenetworking_api,
-    google_project_service.sqladmin_api,
-    google_project_service.secretmanager_api,
-    google_project_service.compute_api,
-  ]
+  depends_on = concat(
+    var.import_service_networking_connection ? [] : [google_service_networking_connection.private_vpc_connection],
+    [
+      google_compute_global_address.private_ip_address,
+      google_project_service.servicenetworking_api,
+      google_project_service.sqladmin_api,
+      google_project_service.secretmanager_api,
+      google_project_service.compute_api,
+    ]
+  )
 
   settings {
     tier = var.db_tier
