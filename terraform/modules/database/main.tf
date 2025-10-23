@@ -73,7 +73,7 @@ resource "google_service_networking_connection" "private_vpc_connection" {
     google_project_service.secretmanager_api,
     google_project_service.compute_api,
   ]
-  
+
   # Gérer les conflits avec les connexions existantes
   lifecycle {
     ignore_changes = [reserved_peering_ranges]
