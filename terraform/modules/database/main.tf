@@ -59,8 +59,6 @@ locals {
   secret_resource_id          = var.import_secret ? data.google_secret_manager_secret.existing_secret[0].id : google_secret_manager_secret.db_app_password[0].id
 }
 
-## NAT déplacé vers le module réseau
-
 resource "google_service_networking_connection" "private_vpc_connection" {
   count                   = var.import_service_networking_connection ? 0 : 1
   provider                = google
@@ -68,6 +66,7 @@ resource "google_service_networking_connection" "private_vpc_connection" {
   service                 = "servicenetworking.googleapis.com"
   reserved_peering_ranges = [local.reserved_peering_range_name]
   depends_on = [
+    google_compute_global_address.private_ip_address,
     google_project_service.servicenetworking_api,
     google_project_service.sqladmin_api,
     google_project_service.secretmanager_api,
@@ -140,5 +139,3 @@ resource "google_secret_manager_secret_version" "db_app_password_version" {
   secret      = var.import_secret ? local.secret_resource_id : google_secret_manager_secret.db_app_password[0].id
   secret_data = random_password.db_app.result
 }
-
-
