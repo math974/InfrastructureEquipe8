@@ -51,7 +51,7 @@ data "external" "check_secret" {
 }
 
 data "external" "check_service_networking_connection" {
-  program = ["bash", "-lc", "gcloud services vpc-peerings list --network=projects/${var.project_id}/global/networks/${var.network_name} --project=${var.project_id} --filter='service:servicenetworking.googleapis.com AND state:ACTIVE' --format=json | grep -q '\"reservedPeeringRanges\".*\"${var.instance_name}-private-ip-range\"' && echo '{\"exists\":\"true\"}' || echo '{\"exists\":\"false\"}'"]
+  program = ["bash", "-lc", "gcloud services vpc-peerings list --network=projects/${var.project_id}/global/networks/${var.network_name} --project=${var.project_id} --filter='service:servicenetworking.googleapis.com AND state:ACTIVE' --format=json | jq -e '.[] | select(.service == \"servicenetworking.googleapis.com\")' >/dev/null 2>&1 && echo '{\"exists\":\"true\"}' || echo '{\"exists\":\"false\"}'"]
 }
 
 resource "google_compute_global_address" "private_ip_address" {
@@ -92,8 +92,8 @@ locals {
   secret_resource_id          = local.secret_exists ? data.google_secret_manager_secret.existing_secret[0].id : google_secret_manager_secret.db_app_password[0].id
 }
 
+# Créer la connexion Service Networking (gère les conflits automatiquement)
 resource "google_service_networking_connection" "private_vpc_connection" {
-  count                   = var.bootstrap ? 1 : (local.connection_exists ? 0 : 1)
   provider                = google
   network                 = "projects/${var.project_id}/global/networks/${var.network_name}"
   service                 = "servicenetworking.googleapis.com"
@@ -106,6 +106,18 @@ resource "google_service_networking_connection" "private_vpc_connection" {
     google_project_service.secretmanager_api,
     google_project_service.compute_api,
   ]
+  
+  # Gérer les conflits avec les connexions existantes
+  lifecycle {
+    ignore_changes = [reserved_peering_ranges]
+  }
+}
+
+# Data source pour récupérer la connexion existante
+data "google_service_networking_connection" "existing_connection" {
+  count     = local.connection_exists ? 1 : 0
+  network   = "projects/${var.project_id}/global/networks/${var.network_name}"
+  service   = "servicenetworking.googleapis.com"
 }
 
 resource "google_sql_database_instance" "mysql" {
