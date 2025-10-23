@@ -38,12 +38,12 @@ resource "google_project_service" "compute_api" {
   service = "compute.googleapis.com"
 }
 
-data "external" "check_global_address" {
-  program = ["bash", "-lc", "gcloud compute addresses describe ${var.instance_name}-private-ip-range --project=${var.project_id} --global >/dev/null 2>&1 && echo '{\"exists\":\"true\"}' || echo '{\"exists\":\"false\"}'"]
-}
-
 data "external" "check_sql_instance" {
   program = ["bash", "-lc", "gcloud sql instances describe ${var.instance_name} --project=${var.project_id} >/dev/null 2>&1 && echo '{\"exists\":\"true\"}' || echo '{\"exists\":\"false\"}'"]
+}
+
+data "external" "check_global_address" {
+  program = ["bash", "-lc", "gcloud compute addresses describe ${var.instance_name}-private-ip-range --project=${var.project_id} --global >/dev/null 2>&1 && echo '{\"exists\":\"true\"}' || echo '{\"exists\":\"false\"}'"]
 }
 
 data "external" "check_secret" {
@@ -55,7 +55,6 @@ data "external" "check_service_networking_connection" {
 }
 
 resource "google_compute_global_address" "private_ip_address" {
-  count         = try(tobool(data.external.check_global_address.result.exists), false) ? 0 : 1
   name          = "${var.instance_name}-private-ip-range"
   project       = var.project_id
   address_type  = "INTERNAL"
@@ -88,8 +87,8 @@ locals {
   secret_exists         = try(tobool(data.external.check_secret.result.exists), false)
   connection_exists     = try(tobool(data.external.check_service_networking_connection.result.exists), false)
 
-  reserved_peering_range_name = local.global_address_exists ? data.google_compute_global_address.existing_private_ip[0].name : google_compute_global_address.private_ip_address[0].name
-  sql_instance_name           = local.sql_instance_exists ? data.google_sql_database_instance.existing_instance[0].name : google_sql_database_instance.mysql[0].name
+  reserved_peering_range_name = local.global_address_exists ? data.google_compute_global_address.existing_private_ip[0].name : google_compute_global_address.private_ip_address.name
+  sql_instance_name           = local.sql_instance_exists ? data.google_sql_database_instance.existing_instance[0].name : google_sql_database_instance.mysql.name
   secret_resource_id          = local.secret_exists ? data.google_secret_manager_secret.existing_secret[0].id : google_secret_manager_secret.db_app_password[0].id
 }
 
@@ -110,7 +109,7 @@ resource "google_service_networking_connection" "private_vpc_connection" {
 }
 
 resource "google_sql_database_instance" "mysql" {
-  count            = local.sql_instance_exists ? 0 : 1
+
   name             = var.instance_name
   project          = var.project_id
   region           = var.region
@@ -134,11 +133,18 @@ resource "google_sql_database_instance" "mysql" {
     }
     availability_type = "ZONAL"
   }
-  deletion_protection = false
+  deletion_protection = true
 
-  # lifecycle {
-  #   prevent_destroy = true
-  # }
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes = [
+      name,
+      region,
+      database_version,
+      settings,
+      deletion_protection
+    ]
+  }
 }
 
 resource "google_sql_database" "app_db" {
@@ -152,9 +158,9 @@ resource "google_sql_database" "app_db" {
     google_sql_database_instance.mysql
   ]
 
-  # lifecycle {
-  #   prevent_destroy = true
-  # }
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "google_sql_user" "app_user" {
