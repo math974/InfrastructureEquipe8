@@ -2,7 +2,7 @@
 
 # Configuration de base
 project_id  = "epitech-vpc-demo-69"
-region      = "europe-west9"
+region      = "europe-west1"
 environment = "prd"
 user_email  = "mathias.ballot974@gmail.com"
 
@@ -15,9 +15,10 @@ network_config = {
 # Configuration Kubernetes
 kubernetes_config = {
   cluster_name       = "gke-prod-cluster"
-  gke_num_nodes      = 2
+  gke_num_nodes      = 1
   machine_type       = "e2-medium"
-  kubernetes_version = "1.27"
+  kubernetes_version = "1.31"
+  node_zones         = ["europe-west1-b"]
 }
 
 # Configuration IAM
