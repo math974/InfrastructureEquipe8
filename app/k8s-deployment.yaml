@@ -1,0 +1,98 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: task-manager-api
+  labels:
+    app: task-manager-api
+    version: v1
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: task-manager-api
+  template:
+    metadata:
+      labels:
+        app: task-manager-api
+        version: v1
+    spec:
+      containers:
+      - name: task-manager-api
+        image: gcr.io/PROJECT_ID/task-manager-api:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: ENVIRONMENT
+          value: "production"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /docs
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /docs
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: sqlite-storage
+          mountPath: /app/data
+      volumes:
+      - name: sqlite-storage
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: task-manager-api-service
+  labels:
+    app: task-manager-api
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 8000
+    protocol: TCP
+  selector:
+    app: task-manager-api
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: task-manager-api-ingress
+  annotations:
+    kubernetes.io/ingress.class: "gce"
+    kubernetes.io/ingress.global-static-ip-name: "task-manager-api-ip"
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /*
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: task-manager-api-service
+            port:
+              number: 80

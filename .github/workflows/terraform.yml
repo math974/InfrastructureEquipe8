@@ -19,8 +19,8 @@ env:
   TF_INPUT: false
 
 jobs:
-  fmt_validate_networks:
-    name: Format & Validate (Networks)
+  fmt_validate:
+    name: Format & Validate
     runs-on: ubuntu-latest
     environment:
       name: Develop
@@ -53,28 +53,27 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-terraform-
 
-      - name: Terraform Init (networks - backend dev)
+      - name: Terraform Init (backend dev)
         run: |
-          cd netwoks
+          cd terraform
           terraform init \
             -backend-config=../configs/dev.config
 
-      - name: Terraform Format Check (networks)
+      - name: Terraform Format Check
         run: |
-          cd netwoks
+          cd terraform
           terraform fmt -check -recursive
 
-      - name: Terraform Validate (networks)
+      - name: Terraform Validate
         run: |
-          cd netwoks
+          cd terraform
           terraform validate
 
-
-  plan_networks:
-    name: Plan (Networks)
+  plan:
+    name: Plan
     runs-on: ubuntu-latest
-    needs: [fmt_validate_networks]
-    if: github.event_name == 'pull_request'
+    needs: [fmt_validate]
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
     environment:
       name: Develop
     permissions:
@@ -107,24 +106,23 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-terraform-
 
-      - name: Terraform Init (networks - backend dev)
+      - name: Terraform Init (backend dev)
         run: |
-          cd netwoks
+          cd terraform
           terraform init \
             -backend-config=../configs/dev.config
 
-      - name: Terraform Plan (networks - env dev)
-        id: plan_networks
+      - name: Terraform Plan (env dev)
         run: |
-          cd netwoks
+          cd terraform
           terraform plan \
-            -var-file=envs/dev.tfvars \
+            -var-file=../environments/dev/terraform.tfvars \
             -input=false
 
-  apply_networks:
-    name: Apply (Networks)
+  apply:
+    name: Apply
     runs-on: ubuntu-latest
-    needs: [fmt_validate_networks]
+    needs: [plan]
     if: github.event_name == 'push'
     environment:
       name: Develop
@@ -157,18 +155,57 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-terraform-
 
-      - name: Terraform Init (networks - backend dev)
+      - name: Terraform Init (backend dev)
         run: |
-          cd netwoks
+          cd terraform
           terraform init \
             -backend-config=../configs/dev.config
 
-      - name: Terraform Apply (networks - env dev)
+      - name: Terraform Apply (env dev)
         run: |
-          cd netwoks
+          cd terraform
           terraform apply \
             -auto-approve \
-            -var-file=envs/dev.tfvars \
+            -var-file=../environments/dev/terraform.tfvars \
             -input=false
+
+  #deploy_app:
+  #  name: Deploy Application
+  #  runs-on: ubuntu-latest
+  #  needs: [apply]
+  #  if: github.event_name == 'push'
+  #  environment:
+  #    name: Develop
+  #  permissions:
+  #    contents: read
+  #    id-token: write
+  #  steps:
+  #    - name: Checkout
+  #      uses: actions/checkout@v4
+#
+  #    - name: Auth to Google Cloud (WIF)
+  #      uses: google-github-actions/auth@v2
+  #      with:
+  #        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+  #        service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+#
+  #    - name: Setup Google Cloud SDK
+  #      uses: google-github-actions/setup-gcloud@v2
+#
+  #    - name: Configure Docker for GCR
+  #      run: gcloud auth configure-docker
+#
+  #    - name: Build and Push Docker Image
+  #      run: |
+  #        cd kubernetes/simple-app
+  #        docker build -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/simple-app:latest .
+  #        docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/simple-app:latest
+#
+  #    - name: Deploy to Kubernetes
+  #      run: |
+  #        gcloud container clusters get-credentials gke-cluster-dev --region europe-west9 --project ${{ secrets.GCP_PROJECT_ID }}
+  #        cd kubernetes/simple-app
+  #        sed "s/PROJECT_ID/${{ secrets.GCP_PROJECT_ID }}/g" k8s-deployment.yaml | kubectl apply -f -
+  #        kubectl rollout status deployment/simple-app
 
 
