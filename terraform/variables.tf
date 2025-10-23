@@ -101,9 +101,3 @@ variable "network_config" {
     ip_range     = string
   })
 }
-
-variable "bootstrap" {
-  description = "Bootstrap mode flag"
-  type        = bool
-  default     = false
-}
