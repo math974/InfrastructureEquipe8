@@ -1,3 +1,16 @@
+terraform {
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = ">= 5.0"
+    }
+    external = {
+      source  = "hashicorp/external"
+      version = ">= 2.3"
+    }
+  }
+}
+
 resource "random_password" "db_app" {
   length           = 20
   override_special = "!@#$%&*()-_=+"
@@ -25,8 +38,24 @@ resource "google_project_service" "compute_api" {
   service = "compute.googleapis.com"
 }
 
+data "external" "check_global_address" {
+  program = ["bash", "-lc", "gcloud compute addresses describe ${var.instance_name}-private-ip-range --project=${var.project_id} --global >/dev/null 2>&1 && echo '{\"exists\":\"true\"}' || echo '{\"exists\":\"false\"}'"]
+}
+
+data "external" "check_sql_instance" {
+  program = ["bash", "-lc", "gcloud sql instances describe ${var.instance_name} --project=${var.project_id} >/dev/null 2>&1 && echo '{\"exists\":\"true\"}' || echo '{\"exists\":\"false\"}'"]
+}
+
+data "external" "check_secret" {
+  program = ["bash", "-lc", "gcloud secrets describe ${var.instance_name}-app-db-password --project=${var.project_id} >/dev/null 2>&1 && echo '{\"exists\":\"true\"}' || echo '{\"exists\":\"false\"}'"]
+}
+
+data "external" "check_service_networking_connection" {
+  program = ["bash", "-lc", "gcloud services vpc-peerings list --network=projects/${var.project_id}/global/networks/${var.network_name} --project=${var.project_id} --format='value(service)' | grep -q '^servicenetworking.googleapis.com$' && echo '{\"exists\":\"true\"}' || echo '{\"exists\":\"false\"}'"]
+}
+
 resource "google_compute_global_address" "private_ip_address" {
-  count         = var.import_global_address ? 0 : 1
+  count         = try(tobool(data.external.check_global_address.result.exists), false) ? 0 : 1
   name          = "${var.instance_name}-private-ip-range"
   project       = var.project_id
   address_type  = "INTERNAL"
@@ -36,31 +65,36 @@ resource "google_compute_global_address" "private_ip_address" {
 }
 
 data "google_compute_global_address" "existing_private_ip" {
-  count   = var.import_global_address ? 1 : 0
+  count   = try(tobool(data.external.check_global_address.result.exists), false) ? 1 : 0
   name    = "${var.instance_name}-private-ip-range"
   project = var.project_id
 }
 
 data "google_sql_database_instance" "existing_instance" {
-  count   = var.import_sql_instance ? 1 : 0
+  count   = try(tobool(data.external.check_sql_instance.result.exists), false) ? 1 : 0
   name    = var.instance_name
   project = var.project_id
 }
 
 data "google_secret_manager_secret" "existing_secret" {
-  count     = var.import_secret ? 1 : 0
+  count     = try(tobool(data.external.check_secret.result.exists), false) ? 1 : 0
   secret_id = "${var.instance_name}-app-db-password"
   project   = var.project_id
 }
 
 locals {
-  reserved_peering_range_name = var.import_global_address ? data.google_compute_global_address.existing_private_ip[0].name : google_compute_global_address.private_ip_address[0].name
-  sql_instance_name           = var.import_sql_instance ? data.google_sql_database_instance.existing_instance[0].name : google_sql_database_instance.mysql[0].name
-  secret_resource_id          = var.import_secret ? data.google_secret_manager_secret.existing_secret[0].id : google_secret_manager_secret.db_app_password[0].id
+  global_address_exists = try(tobool(data.external.check_global_address.result.exists), false)
+  sql_instance_exists   = try(tobool(data.external.check_sql_instance.result.exists), false)
+  secret_exists         = try(tobool(data.external.check_secret.result.exists), false)
+  connection_exists     = try(tobool(data.external.check_service_networking_connection.result.exists), false)
+
+  reserved_peering_range_name = local.global_address_exists ? data.google_compute_global_address.existing_private_ip[0].name : google_compute_global_address.private_ip_address[0].name
+  sql_instance_name           = local.sql_instance_exists ? data.google_sql_database_instance.existing_instance[0].name : google_sql_database_instance.mysql[0].name
+  secret_resource_id          = local.secret_exists ? data.google_secret_manager_secret.existing_secret[0].id : google_secret_manager_secret.db_app_password[0].id
 }
 
 resource "google_service_networking_connection" "private_vpc_connection" {
-  count                   = var.import_service_networking_connection ? 0 : 1
+  count                   = local.connection_exists ? 0 : 1
   provider                = google
   network                 = "projects/${var.project_id}/global/networks/${var.network_name}"
   service                 = "servicenetworking.googleapis.com"
@@ -75,7 +109,7 @@ resource "google_service_networking_connection" "private_vpc_connection" {
 }
 
 resource "google_sql_database_instance" "mysql" {
-  count            = var.import_sql_instance ? 0 : 1
+  count            = local.sql_instance_exists ? 0 : 1
   name             = var.instance_name
   project          = var.project_id
   region           = var.region
@@ -101,32 +135,32 @@ resource "google_sql_database_instance" "mysql" {
   }
   deletion_protection = true
 
-  lifecycle {
-    prevent_destroy = true
-  }
+  # lifecycle {
+  #   prevent_destroy = true
+  # }
 }
 
 resource "google_sql_database" "app_db" {
   name      = var.db_name
-  instance  = var.import_sql_instance ? local.sql_instance_name : google_sql_database_instance.mysql[0].name
+  instance  = local.sql_instance_name
   project   = var.project_id
   charset   = "utf8mb4"
   collation = "utf8mb4_unicode_ci"
 
-  lifecycle {
-    prevent_destroy = true
-  }
+  # lifecycle {
+  #   prevent_destroy = true
+  # }
 }
 
 resource "google_sql_user" "app_user" {
   name     = var.db_user
-  instance = var.import_sql_instance ? local.sql_instance_name : google_sql_database_instance.mysql[0].name
+  instance = local.sql_instance_name
   project  = var.project_id
   password = random_password.db_app.result
 }
 
 resource "google_secret_manager_secret" "db_app_password" {
-  count     = var.import_secret ? 0 : 1
+  count     = local.secret_exists ? 0 : 1
   secret_id = "${var.instance_name}-app-db-password"
   project   = var.project_id
 
@@ -136,6 +170,6 @@ resource "google_secret_manager_secret" "db_app_password" {
 }
 
 resource "google_secret_manager_secret_version" "db_app_password_version" {
-  secret      = var.import_secret ? local.secret_resource_id : google_secret_manager_secret.db_app_password[0].id
+  secret      = local.secret_resource_id
   secret_data = random_password.db_app.result
 }

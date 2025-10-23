@@ -53,29 +53,3 @@ variable "private_ip_prefix_len" {
   type        = number
   default     = 16
 }
-
-variable "import_global_address" {
-  description = "If true, reference existing reserved global address"
-  type        = bool
-  default     = false
-}
-
-variable "import_sql_instance" {
-  description = "If true, reference existing Cloud SQL instance"
-  type        = bool
-  default     = false
-}
-
-variable "import_secret" {
-  description = "If true, reference existing Secret Manager secret"
-  type        = bool
-  default     = false
-}
-
-variable "import_service_networking_connection" {
-  description = "If true, do not create Service Networking Connection; assume it already exists"
-  type        = bool
-  default     = false
-}
-
-

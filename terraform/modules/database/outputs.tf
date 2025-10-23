@@ -30,10 +30,10 @@ output "cloudsql_app_password_secret" {
 
 output "cloudsql_connection_name" {
   description = "Cloud SQL connection name (project:region:instance)"
-  value       = var.import_sql_instance ? data.google_sql_database_instance.existing_instance[0].connection_name : google_sql_database_instance.mysql[0].connection_name
+  value       = local.sql_instance_exists ? data.google_sql_database_instance.existing_instance[0].connection_name : google_sql_database_instance.mysql[0].connection_name
 }
 
 output "cloudsql_private_ip" {
   description = "Private IP address of the Cloud SQL instance"
-  value       = var.import_sql_instance ? data.google_sql_database_instance.existing_instance[0].ip_address[0].ip_address : google_sql_database_instance.mysql[0].ip_address[0].ip_address
+  value       = local.sql_instance_exists ? data.google_sql_database_instance.existing_instance[0].ip_address[0].ip_address : google_sql_database_instance.mysql[0].ip_address[0].ip_address
 }

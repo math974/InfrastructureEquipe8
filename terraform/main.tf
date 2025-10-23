@@ -50,16 +50,13 @@ module "database" {
   network_self_link = module.network.network_self_link
   network_name      = module.network.network_name
 
-  instance_name                        = var.database_config.instance_name
-  db_name                              = var.database_config.db_name
-  db_user                              = var.database_config.db_user
-  db_tier                              = var.database_config.db_tier
-  db_version                           = var.database_config.db_version
-  private_ip_prefix_len                = var.database_config.private_ip_prefix_len
-  import_global_address                = var.database_config.import_global_address
-  import_sql_instance                  = var.database_config.import_sql_instance
-  import_secret                        = var.database_config.import_secret
-  import_service_networking_connection = var.database_config.import_service_networking_connection
+  instance_name         = var.database_config.instance_name
+  db_name               = var.database_config.db_name
+  db_user               = var.database_config.db_user
+  db_tier               = var.database_config.db_tier
+  db_version            = var.database_config.db_version
+  private_ip_prefix_len = var.database_config.private_ip_prefix_len
+
 
   depends_on = [module.network]
 }
