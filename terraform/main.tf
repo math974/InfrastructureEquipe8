@@ -59,6 +59,7 @@ module "database" {
   import_global_address = var.database_config.import_global_address
   import_sql_instance   = var.database_config.import_sql_instance
   import_secret         = var.database_config.import_secret
+  import_service_networking_connection = var.database_config.import_service_networking_connection
 
   depends_on = [module.network]
 }

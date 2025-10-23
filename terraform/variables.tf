@@ -93,6 +93,7 @@ variable "database_config" {
     import_global_address = optional(bool, false)
     import_sql_instance   = optional(bool, false)
     import_secret         = optional(bool, false)
+    import_service_networking_connection = optional(bool, false)
   })
   default = {}
 }
