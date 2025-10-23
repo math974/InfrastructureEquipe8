@@ -147,13 +147,13 @@ resource "google_sql_database" "app_db" {
   charset   = "utf8mb4"
   collation = "utf8mb4_unicode_ci"
 
-  # lifecycle {
-  #   prevent_destroy = true
-  # }
-
   depends_on = [
     google_sql_database_instance.mysql
   ]
+
+  # lifecycle {
+  #   prevent_destroy = true
+  # }
 }
 
 resource "google_sql_user" "app_user" {
