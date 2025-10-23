@@ -4,6 +4,10 @@ terraform {
       source  = "hashicorp/google"
       version = ">= 5.0"
     }
+    external = {
+      source  = "hashicorp/external"
+      version = ">= 2.3"
+    }
   }
 }
 
@@ -34,6 +38,10 @@ resource "google_project_service" "compute_api" {
   service = "compute.googleapis.com"
 }
 
+data "external" "check_service_networking_connection" {
+  program = ["bash", "-lc", "gcloud services vpc-peerings list --network=projects/${var.project_id}/global/networks/${var.network_name} --project=${var.project_id} --filter='service:servicenetworking.googleapis.com AND state:ACTIVE' --format=json | grep -q '\"reservedPeeringRanges\".*\"${var.instance_name}-private-ip-range\"' && echo '{\"exists\":\"true\"}' || echo '{\"exists\":\"false\"}'"]
+}
+
 resource "google_compute_global_address" "private_ip_address" {
   name          = "${var.instance_name}-private-ip-range"
   project       = var.project_id
@@ -48,6 +56,7 @@ resource "google_compute_global_address" "private_ip_address" {
 }
 
 resource "google_service_networking_connection" "private_vpc_connection" {
+  count                   = try(tobool(data.external.check_service_networking_connection.result.exists), false) ? 0 : 1
   provider                = google
   network                 = "projects/${var.project_id}/global/networks/${var.network_name}"
   service                 = "servicenetworking.googleapis.com"
