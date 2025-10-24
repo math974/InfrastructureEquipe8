@@ -60,7 +60,21 @@ module "database" {
   depends_on = [module.network]
 }
 
-# Module Kubernetes (dépend du réseau, IAM et base de données)
+# Module Artifact Registry
+module "artifact_registry" {
+  source = "./modules/artifact-registry"
+
+  project_id      = var.project_id
+  region          = var.region
+  environment     = var.environment
+  repository_name = var.artifact_registry_config.repository_name
+
+  # Configuration de rétention
+  retention_days   = var.artifact_registry_config.retention_days
+  cleanup_policies = var.artifact_registry_config.cleanup_policies
+}
+
+# Module Kubernetes (dépend du réseau, IAM, base de données et Artifact Registry)
 module "kubernetes" {
   source = "./modules/kubernetes"
 
@@ -78,5 +92,5 @@ module "kubernetes" {
   node_zones                  = var.kubernetes_config.node_zones
   nodes_service_account_email = module.iam.gke_nodes_service_account_email
 
-  depends_on = [module.network, module.iam, module.database]
+  depends_on = [module.network, module.iam, module.database, module.artifact_registry]
 }

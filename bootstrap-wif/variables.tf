@@ -68,6 +68,8 @@ variable "roles" {
     "roles/servicenetworking.networksAdmin",
     "roles/container.admin",
     "roles/iam.serviceAccountAdmin",
-    "roles/resourcemanager.projectIamAdmin"
+    "roles/resourcemanager.projectIamAdmin",
+    "roles/artifactregistry.admin",
+    "roles/artifactregistry.writer"
   ]
 }

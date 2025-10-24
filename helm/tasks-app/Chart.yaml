@@ -1,0 +1,16 @@
+apiVersion: v2
+name: tasks-app
+description: A Helm chart for Tasks Application
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - tasks
+  - fastapi
+  - mysql
+home: https://github.com/your-org/InfrastructureEquipe8
+sources:
+  - https://github.com/your-org/InfrastructureEquipe8
+maintainers:
+  - name: Your Team
+    email: team@yourcompany.com

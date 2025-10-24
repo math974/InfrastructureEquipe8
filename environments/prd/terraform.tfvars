@@ -31,6 +31,31 @@ database_config = {
   private_ip_prefix_len = 16
 }
 
+# Configuration Artifact Registry
+artifact_registry_config = {
+  repository_name = "tasks-app"
+  retention_days  = 30
+  cleanup_policies = [
+    {
+      id     = "delete-prerelease"
+      action = "DELETE"
+      condition = {
+        tag_state    = "TAGGED"
+        tag_prefixes = ["dev-", "test-", "staging-"]
+        older_than   = "2592000s" # 30 jours
+      }
+    },
+    {
+      id     = "keep-production"
+      action = "KEEP"
+      condition = {
+        tag_state    = "TAGGED"
+        tag_prefixes = ["v", "prod-", "main-"]
+      }
+    }
+  ]
+}
+
 # Configuration IAM
 team_member_emails = [
   "arnassalomlucas@gmail.com",

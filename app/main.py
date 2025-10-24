@@ -20,6 +20,12 @@ app = FastAPI(title="Task Manager API", version="1.0.0")
 app.include_router(tasks_router)
 
 
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for Docker healthcheck"""
+    return {"status": "healthy", "service": "tasks-api"}
+
+
 @app.middleware("http")
 async def correlation_id_middleware(request: Request, call_next):
     correlation_id = (
