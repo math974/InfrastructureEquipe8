@@ -110,6 +110,13 @@ resource "google_project_iam_member" "gke_nodes_cloudsql_client" {
   member  = "serviceAccount:${google_service_account.gke_nodes.email}"
 }
 
+# Permissions pour Artifact Registry
+resource "google_project_iam_member" "gke_nodes_artifactregistry_reader" {
+  project = var.project_id
+  role    = "roles/artifactregistry.reader"
+  member  = "serviceAccount:${google_service_account.gke_nodes.email}"
+}
+
 # Les permissions pour GitHub Actions sont gérées via Workload Identity Federation
 # dans le module bootstrap-wif/
 

@@ -39,4 +39,14 @@ output "deployment_info" {
   }
 }
 
+# Outputs pour Artifact Registry
+output "artifact_registry_info" {
+  description = "Informations sur Artifact Registry"
+  value = {
+    repository_id = module.artifact_registry.repository_id
+    repository_name = module.artifact_registry.repository_name
+    repository_url = module.artifact_registry.repository_url
+  }
+}
+
 # Les outputs pour GitHub Actions sont gérés dans bootstrap-wif/

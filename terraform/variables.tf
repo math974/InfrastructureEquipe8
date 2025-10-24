@@ -101,3 +101,21 @@ variable "network_config" {
     ip_range     = string
   })
 }
+
+variable "artifact_registry_config" {
+  description = "Configuration pour Artifact Registry"
+  type = object({
+    repository_name = optional(string, "tasks-app")
+    retention_days = optional(number, 7)
+    cleanup_policies = optional(list(object({
+      id     = string
+      action = string
+      condition = object({
+        tag_state    = optional(string)
+        tag_prefixes = optional(list(string))
+        older_than   = optional(string)
+      })
+    })), [])
+  })
+  default = {}
+}

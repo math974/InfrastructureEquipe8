@@ -29,6 +29,35 @@ database_config = {
   db_tier               = "db-f1-micro"
   db_version            = "MYSQL_8_0"
   private_ip_prefix_len = 16
+  import_global_address = true
+  import_sql_instance   = false
+  import_secret         = false
+  import_service_networking_connection = true
+}
+
+# Configuration Artifact Registry
+artifact_registry_config = {
+  repository_name = "tasks-app"
+  retention_days  = 7
+  cleanup_policies = [
+    {
+      id     = "delete-prerelease"
+      action = "DELETE"
+      condition = {
+        tag_state    = "TAGGED"
+        tag_prefixes = ["dev-", "test-", "staging-"]
+        older_than   = "604800s" # 7 jours
+      }
+    },
+    {
+      id     = "keep-production"
+      action = "KEEP"
+      condition = {
+        tag_state    = "TAGGED"
+        tag_prefixes = ["v", "prod-", "main-"]
+      }
+    }
+  ]
 }
 
 # Configuration IAM

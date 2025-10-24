@@ -1,173 +1,139 @@
 #!/bin/bash
 
-# Script pour configurer les secrets GitHub Actions
+# Script pour configurer les secrets GitHub pour les workflows CI/CD
+# Ce script doit être exécuté après le déploiement Terraform
+
 set -e
 
-# Couleurs pour les logs
+# Couleurs pour les messages
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-log() {
-    echo -e "${GREEN}[INFO]${NC} $1"
-}
+echo -e "${GREEN}🔧 Configuration des secrets GitHub pour les workflows CI/CD${NC}"
 
-warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
-}
-
-error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
-info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-}
-
-# Vérifier les prérequis
-check_prerequisites() {
-    log "Vérification des prérequis..."
-    
-    if ! command -v terraform &> /dev/null; then
-        error "Terraform n'est pas installé"
-        exit 1
-    fi
-    
-    if ! command -v gh &> /dev/null; then
-        error "GitHub CLI n'est pas installé"
-        exit 1
-    fi
-    
-    if ! gh auth status &> /dev/null; then
-        error "GitHub CLI n'est pas authentifié"
-        exit 1
-    fi
-    
-    log "Prérequis OK"
-}
-
-# Récupérer les informations Terraform
-get_terraform_outputs() {
-    log "Récupération des outputs Terraform..."
-    
-    cd terraform
-    
-    # Initialiser Terraform si nécessaire
-    if [ ! -d ".terraform" ]; then
-        log "Initialisation de Terraform..."
-        terraform init -backend-config=../configs/dev.config
-    fi
-    
-    # Récupérer les outputs
-    PROJECT_ID=$(terraform output -raw deployment_info | jq -r '.project_id')
-    CLUSTER_NAME=$(terraform output -raw deployment_info | jq -r '.cluster_name')
-    REGION=$(terraform output -raw deployment_info | jq -r '.region')
-    INSTANCE_NAME="tasks-mysql"
-    
-    cd ../bootstrap-wif
-    
-    # Récupérer les informations WIF
-    if [ ! -d ".terraform" ]; then
-        log "Initialisation de bootstrap-wif..."
-        terraform init -backend-config=../configs/bootstrap-wif-dev.config
-    fi
-    
-    WIF_PROVIDER=$(terraform output -raw workload_identity_provider)
-    WIF_SERVICE_ACCOUNT=$(terraform output -raw service_account_email)
-    
-    cd ..
-    
-    log "Informations récupérées:"
-    info "Project ID: $PROJECT_ID"
-    info "Cluster: $CLUSTER_NAME"
-    info "Region: $REGION"
-    info "Instance Name: $INSTANCE_NAME"
-    info "WIF Provider: $WIF_PROVIDER"
-    info "Service Account: $WIF_SERVICE_ACCOUNT"
-}
-
-# Configurer les secrets GitHub
-setup_github_secrets() {
-    log "Configuration des secrets GitHub..."
-    
-    # Secrets pour l'environnement development
-    log "Configuration de l'environnement 'development'..."
-    gh secret set GCP_PROJECT_ID --body "$PROJECT_ID" --env development
-    gh secret set GCP_WORKLOAD_IDENTITY_PROVIDER --body "$WIF_PROVIDER" --env development
-    gh secret set GCP_SERVICE_ACCOUNT --body "$WIF_SERVICE_ACCOUNT" --env development
-    gh secret set GKE_CLUSTER_NAME --body "$CLUSTER_NAME" --env development
-    gh secret set GKE_ZONE --body "$REGION" --env development
-    
-    # Secrets pour l'environnement production
-    log "Configuration de l'environnement 'production'..."
-    gh secret set GCP_PROJECT_ID --body "$PROJECT_ID" --env production
-    gh secret set GCP_WORKLOAD_IDENTITY_PROVIDER --body "$WIF_PROVIDER" --env production
-    gh secret set GCP_SERVICE_ACCOUNT --body "$WIF_SERVICE_ACCOUNT" --env production
-    gh secret set GKE_CLUSTER_NAME --body "$CLUSTER_NAME" --env production
-    gh secret set GKE_ZONE --body "$REGION" --env production
-    
-    log "Secrets configurés avec succès"
-}
-
-# Afficher les informations de configuration
-show_configuration_info() {
-    log "Configuration terminée !"
-    echo ""
-    info "=== INFORMATIONS DE CONFIGURATION ==="
-    echo ""
-    info "Project ID: $PROJECT_ID"
-    info "Cluster: $CLUSTER_NAME"
-    info "Region: $REGION"
-    info "WIF Provider: $WIF_PROVIDER"
-    info "Service Account: $WIF_SERVICE_ACCOUNT"
-    echo ""
-    warn "=== ACTIONS REQUISES ==="
-    echo ""
-    warn "1. Les mots de passe de base de données sont gérés automatiquement"
-    warn "   via Google Secret Manager (${INSTANCE_NAME}-app-db-password)"
-    echo ""
-    warn "2. Configurez les environnements GitHub:"
-    warn "   - Allez dans Settings > Environments"
-    warn "   - Créez les environnements 'development' et 'production'"
-    warn "   - Configurez les protection rules si nécessaire"
-    echo ""
-    warn "3. Testez le déploiement:"
-    warn "   - Push sur une branche (sauf main) → Déploiement DEV"
-    warn "   - Push sur main → Déploiement PROD"
-    echo ""
-    log "Configuration terminée avec succès !"
-}
-
-# Fonction principale
-main() {
-    log "Démarrage de la configuration GitHub Actions..."
-    
-    check_prerequisites
-    get_terraform_outputs
-    setup_github_secrets
-    show_configuration_info
-}
-
-# Aide
-show_help() {
-    echo "Usage: $0"
-    echo ""
-    echo "Ce script configure automatiquement les secrets GitHub Actions"
-    echo "pour le déploiement sur Google Cloud Platform."
-    echo ""
-    echo "Prérequis:"
-    echo "  - Terraform configuré et déployé"
-    echo "  - GitHub CLI installé et authentifié"
-    echo "  - Accès au repository GitHub"
-}
-
-# Gestion des arguments
-if [[ "$1" == "-h" || "$1" == "--help" ]]; then
-    show_help
-    exit 0
+# Vérifier que gh CLI est installé
+if ! command -v gh &> /dev/null; then
+    echo -e "${RED}❌ GitHub CLI (gh) n'est pas installé. Veuillez l'installer d'abord.${NC}"
+    echo "Installation: https://cli.github.com/"
+    exit 1
 fi
 
-# Exécuter le script principal
-main
+# Vérifier que l'utilisateur est connecté à GitHub
+if ! gh auth status &> /dev/null; then
+    echo -e "${RED}❌ Vous n'êtes pas connecté à GitHub CLI. Veuillez vous connecter d'abord.${NC}"
+    echo "Commande: gh auth login"
+    exit 1
+fi
+
+# Vérifier que gcloud CLI est installé
+if ! command -v gcloud &> /dev/null; then
+    echo -e "${RED}❌ Google Cloud CLI (gcloud) n'est pas installé. Veuillez l'installer d'abord.${NC}"
+    echo "Installation: https://cloud.google.com/sdk/docs/install"
+    exit 1
+fi
+
+# Vérifier que l'utilisateur est connecté à Google Cloud
+if ! gcloud auth list --filter=status:ACTIVE --format="value(account)" | grep -q .; then
+    echo -e "${RED}❌ Vous n'êtes pas connecté à Google Cloud. Veuillez vous connecter d'abord.${NC}"
+    echo "Commande: gcloud auth login"
+    exit 1
+fi
+
+# Obtenir les informations du projet
+PROJECT_ID=$(gcloud config get-value project)
+if [ -z "$PROJECT_ID" ]; then
+    echo -e "${RED}❌ Aucun projet Google Cloud configuré. Veuillez configurer un projet.${NC}"
+    echo "Commande: gcloud config set project YOUR_PROJECT_ID"
+    exit 1
+fi
+
+echo -e "${YELLOW}📋 Configuration pour le projet: ${PROJECT_ID}${NC}"
+
+# Obtenir les informations du cluster GKE
+echo -e "${YELLOW}🔍 Recherche des clusters GKE...${NC}"
+CLUSTERS=$(gcloud container clusters list --format="value(name,location)" --project=$PROJECT_ID)
+
+if [ -z "$CLUSTERS" ]; then
+    echo -e "${RED}❌ Aucun cluster GKE trouvé dans le projet ${PROJECT_ID}${NC}"
+    exit 1
+fi
+
+# Afficher les clusters disponibles
+echo -e "${YELLOW}📋 Clusters GKE disponibles:${NC}"
+echo "$CLUSTERS"
+
+# Demander à l'utilisateur de choisir le cluster
+echo -e "${YELLOW}🤔 Veuillez choisir le cluster pour l'environnement de développement:${NC}"
+read -p "Nom du cluster: " CLUSTER_NAME
+read -p "Région du cluster: " CLUSTER_REGION
+
+# Obtenir les informations du service account GitHub Actions depuis bootstrap-wif
+echo -e "${YELLOW}🔍 Recherche du service account GitHub Actions...${NC}"
+SA_EMAIL=$(gcloud iam service-accounts list --filter="displayName:GitHub Terraform" --format="value(email)" --project=$PROJECT_ID)
+
+if [ -z "$SA_EMAIL" ]; then
+    echo -e "${RED}❌ Service account GitHub Actions non trouvé.${NC}"
+    echo "Assurez-vous que le module bootstrap-wif/ a été déployé avec succès."
+    exit 1
+fi
+
+echo -e "${GREEN}✅ Service account trouvé: ${SA_EMAIL}${NC}"
+
+# Obtenir les informations Workload Identity Federation
+echo -e "${YELLOW}🔍 Recherche de la configuration Workload Identity Federation...${NC}"
+WIF_PROVIDER=$(gcloud iam workload-identity-pools providers list --location=global --format="value(name)" --project=$PROJECT_ID | head -1)
+
+if [ -z "$WIF_PROVIDER" ]; then
+    echo -e "${RED}❌ Workload Identity Federation non configuré.${NC}"
+    echo "Veuillez d'abord configurer WIF avec le module bootstrap-wif/"
+    exit 1
+fi
+
+echo -e "${GREEN}✅ WIF Provider trouvé: ${WIF_PROVIDER}${NC}"
+
+# Configuration des secrets GitHub
+echo -e "${YELLOW}🔧 Configuration des secrets GitHub...${NC}"
+
+# Secrets pour l'environnement de développement
+echo -e "${YELLOW}📝 Configuration des secrets pour l'environnement 'Develop'...${NC}"
+
+gh secret set GCP_PROJECT_ID --body="$PROJECT_ID" --env=Develop
+gh secret set GKE_CLUSTER_NAME --body="$CLUSTER_NAME" --env=Develop
+gh secret set GKE_ZONE --body="$CLUSTER_REGION" --env=Develop
+gh secret set GCP_WORKLOAD_IDENTITY_PROVIDER --body="$WIF_PROVIDER" --env=Develop
+gh secret set GCP_SERVICE_ACCOUNT --body="$SA_EMAIL" --env=Develop
+
+# Variables pour l'environnement de développement
+echo -e "${YELLOW}📝 Configuration des variables pour l'environnement 'Develop'...${NC}"
+
+gh variable set REGISTRY --body="gcr.io" --env=Develop
+gh variable set IMAGE_NAME --body="tasks-app" --env=Develop
+gh variable set INSTANCE_NAME --body="tasks-mysql" --env=Develop
+
+# Secrets pour l'environnement de production
+echo -e "${YELLOW}📝 Configuration des secrets pour l'environnement 'Production'...${NC}"
+
+gh secret set GCP_PROJECT_ID --body="$PROJECT_ID" --env=Production
+gh secret set GKE_CLUSTER_NAME --body="$CLUSTER_NAME" --env=Production
+gh secret set GKE_ZONE --body="$CLUSTER_REGION" --env=Production
+gh secret set GCP_WORKLOAD_IDENTITY_PROVIDER --body="$WIF_PROVIDER" --env=Production
+gh secret set GCP_SERVICE_ACCOUNT --body="$SA_EMAIL" --env=Production
+
+# Variables pour l'environnement de production
+echo -e "${YELLOW}📝 Configuration des variables pour l'environnement 'Production'...${NC}"
+
+gh variable set REGISTRY --body="gcr.io" --env=Production
+gh variable set IMAGE_NAME --body="tasks-app" --env=Production
+gh variable set INSTANCE_NAME --body="tasks-mysql" --env=Production
+
+echo -e "${GREEN}✅ Configuration terminée avec succès !${NC}"
+echo -e "${YELLOW}📋 Résumé de la configuration:${NC}"
+echo "  - Projet GCP: $PROJECT_ID"
+echo "  - Cluster GKE: $CLUSTER_NAME ($CLUSTER_REGION)"
+echo "  - Service Account: $SA_EMAIL"
+echo "  - WIF Provider: $WIF_PROVIDER"
+echo ""
+echo -e "${GREEN}🎉 Les workflows CI/CD sont maintenant configurés !${NC}"
+echo -e "${YELLOW}💡 Vous pouvez maintenant pousser du code pour déclencher les workflows.${NC}"

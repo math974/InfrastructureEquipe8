@@ -1,6 +1,10 @@
 name: Deploy to Development
 
 on:
+  workflow_run:
+    workflows: ["Terraform (Develop)"]
+    types: [completed]
+    branches-ignore: [ main ]
   push:
     branches-ignore: [ main ]
   pull_request:
@@ -15,7 +19,7 @@ env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   GKE_CLUSTER: ${{ secrets.GKE_CLUSTER_NAME }}
   GKE_ZONE: ${{ secrets.GKE_ZONE }}
-  REGISTRY: gcr.io
+  REGISTRY: ${{ vars.ARTIFACT_REGISTRY_URL || 'gcr.io' }}
   IMAGE_NAME: tasks-app
   INSTANCE_NAME: tasks-mysql
 
@@ -45,7 +49,7 @@ jobs:
   build-and-push:
     needs: test
     runs-on: ubuntu-latest
-    if: github.ref != 'refs/heads/main'
+    if: github.ref != 'refs/heads/main' && (github.event_name == 'workflow_run' || github.event_name == 'push')
     environment:
       name: Develop
 
@@ -62,16 +66,31 @@ jobs:
     - name: Set up Cloud SDK
       uses: google-github-actions/setup-gcloud@v1
 
+    - name: Get Artifact Registry URL
+      run: |
+        # Obtenir l'URL d'Artifact Registry depuis Terraform
+        ARTIFACT_REGISTRY_URL=$(gcloud artifacts repositories list --format="value(name)" --filter="format=DOCKER" --project=$PROJECT_ID | head -1)
+        if [ -n "$ARTIFACT_REGISTRY_URL" ]; then
+          echo "ARTIFACT_REGISTRY_URL=$ARTIFACT_REGISTRY_URL" >> $GITHUB_ENV
+          echo "REGISTRY=$ARTIFACT_REGISTRY_URL" >> $GITHUB_ENV
+          echo "✅ Artifact Registry trouvé: $ARTIFACT_REGISTRY_URL"
+        else
+          echo "⚠️  Aucun Artifact Registry trouvé, utilisation de GCR"
+          echo "REGISTRY=gcr.io" >> $GITHUB_ENV
+        fi
+
     - name: Configure Docker to use gcloud as a credential helper
       run: gcloud auth configure-docker
 
-    - name: Build and push to GCR
+    - name: Build and push to Artifact Registry
       run: |
         cd app
-        docker build -t $REGISTRY/$PROJECT_ID/$IMAGE_NAME:$GITHUB_SHA .
-        docker tag $REGISTRY/$PROJECT_ID/$IMAGE_NAME:$GITHUB_SHA $REGISTRY/$PROJECT_ID/$IMAGE_NAME:dev-latest
-        docker push $REGISTRY/$PROJECT_ID/$IMAGE_NAME:$GITHUB_SHA
-        docker push $REGISTRY/$PROJECT_ID/$IMAGE_NAME:dev-latest
+        # Configuration de l'authentification pour Artifact Registry
+        gcloud auth configure-docker $REGISTRY --quiet
+        docker build -t $REGISTRY/$IMAGE_NAME:$GITHUB_SHA .
+        docker tag $REGISTRY/$IMAGE_NAME:$GITHUB_SHA $REGISTRY/$IMAGE_NAME:dev-latest
+        docker push $REGISTRY/$IMAGE_NAME:$GITHUB_SHA
+        docker push $REGISTRY/$IMAGE_NAME:dev-latest
 
     - name: Build and push to GitHub Container Registry
       run: |
