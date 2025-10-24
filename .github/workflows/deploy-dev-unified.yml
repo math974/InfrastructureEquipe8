@@ -382,11 +382,11 @@ jobs:
             --namespace tasks-dev \
             --create-namespace \
             --values ./helm/tasks-app/values-dev.yaml \
-            --set image.repository=$REGISTRY/$IMAGE_NAME \
-            --set image.tag=dev-latest \
-            --set env.DB_HOST=$DB_HOST \
-            --set env.DB_NAME=$DB_NAME \
-            --set env.DB_USER=app_user \
+            --set image.repository="$REGISTRY/$IMAGE_NAME" \
+            --set-string image.tag=dev-latest \
+            --set-string env.DB_HOST=$DB_HOST \
+            --set-string env.DB_NAME=$DB_NAME \
+            --set-string env.DB_USER=tasks_app \
             --set-string secrets.dbPassword="$DB_PASSWORD" \
             --wait --timeout=10m \
             --debug --atomic
