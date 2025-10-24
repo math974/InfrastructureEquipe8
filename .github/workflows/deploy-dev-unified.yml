@@ -352,11 +352,19 @@ jobs:
 
       - name: Get database password from Secret Manager
         run: |
-          echo "🔐 Récupération du mot de passe de la base de données..."
+          echo "🔐 Récupération des informations de connexion à la base de données..."
           
           # Récupérer le nom de l'instance Cloud SQL dynamiquement
           DB_INSTANCE_NAME=$(gcloud sql instances list --project=$PROJECT_ID --format="value(name)" | head -1)
           echo "Instance Cloud SQL trouvée: $DB_INSTANCE_NAME"
+          
+          # Récupérer l'IP privée de l'instance Cloud SQL
+          DB_HOST=$(gcloud sql instances describe $DB_INSTANCE_NAME --project=$PROJECT_ID --format="value(ipAddresses[0].ipAddress)")
+          echo "DB_HOST=$DB_HOST" >> $GITHUB_ENV
+          echo "✅ IP de la base de données: $DB_HOST"
+          
+          # Récupérer le nom de la base de données
+          echo "DB_NAME=tasksdb" >> $GITHUB_ENV
           
           # Récupérer le mot de passe depuis Secret Manager
           DB_PASSWORD=$(gcloud secrets versions access latest --secret="${DB_INSTANCE_NAME}-app-db-password" --project=$PROJECT_ID)
@@ -366,14 +374,22 @@ jobs:
       - name: Deploy to GKE with Helm
         run: |
           echo "🚀 Déploiement sur GKE avec Helm..."
+          echo "  📦 Image: $REGISTRY/$IMAGE_NAME:dev-latest"
+          echo "  🗄️  DB Host: $DB_HOST"
+          echo "  📊 DB Name: $DB_NAME"
+          
           helm upgrade --install tasks-app-dev ./helm/tasks-app \
             --namespace tasks-dev \
             --create-namespace \
             --values ./helm/tasks-app/values-dev.yaml \
-            --set image.repository=$REGISTRY \
+            --set image.repository=$REGISTRY/$IMAGE_NAME \
             --set image.tag=dev-latest \
-            --set secrets.dbPassword=$DB_PASSWORD \
-            --wait --timeout=5m
+            --set env.DB_HOST=$DB_HOST \
+            --set env.DB_NAME=$DB_NAME \
+            --set env.DB_USER=app_user \
+            --set secrets.dbPassword="$DB_PASSWORD" \
+            --wait --timeout=10m \
+            --debug --atomic
           echo "✅ Déploiement terminé"
 
       - name: Verify deployment

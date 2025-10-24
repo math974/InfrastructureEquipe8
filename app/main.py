@@ -23,7 +23,24 @@ app.include_router(tasks_router)
 @app.get("/health")
 async def health_check():
     """Health check endpoint for Docker healthcheck"""
-    return {"status": "healthy", "service": "tasks-api"}
+    from core.db import get_db
+    try:
+        # Vérifier la connexion à la DB
+        with get_db() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT 1")
+            cur.fetchone()
+        return {"status": "healthy", "service": "tasks-api", "database": "connected"}
+    except Exception as e:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unhealthy",
+                "service": "tasks-api",
+                "database": "disconnected",
+                "error": str(e)
+            }
+        )
 
 
 @app.middleware("http")
@@ -100,7 +117,25 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 @app.on_event("startup")
 def on_startup():
-    init_db()
+    import time
+    max_retries = 5
+    retry_delay = 5  # secondes
+    
+    for attempt in range(max_retries):
+        try:
+            print(f"Tentative de connexion à la base de données ({attempt + 1}/{max_retries})...")
+            init_db()
+            print("✅ Connexion à la base de données réussie !")
+            break
+        except Exception as e:
+            print(f"❌ Erreur de connexion à la base de données: {e}")
+            if attempt < max_retries - 1:
+                print(f"⏳ Nouvelle tentative dans {retry_delay} secondes...")
+                time.sleep(retry_delay)
+            else:
+                print("⚠️ Impossible de se connecter à la base de données après plusieurs tentatives.")
+                print("⚠️ L'application démarre mais sera en mode dégradé.")
+    
     # start background scheduler
     loop = asyncio.get_event_loop()
     # store task on app.state to allow cancellation
