@@ -297,6 +297,12 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
 
+      - name: Install gke-gcloud-auth-plugin
+        run: |
+          echo "🔧 Installation du plugin gke-gcloud-auth-plugin..."
+          gcloud components install gke-gcloud-auth-plugin --quiet
+          echo "✅ Plugin gke-gcloud-auth-plugin installé"
+
       - name: Get Artifact Registry URL
         run: |
           echo "🔍 Récupération de l'URL Artifact Registry..."
