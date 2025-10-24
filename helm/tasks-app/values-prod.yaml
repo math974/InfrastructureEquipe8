@@ -1,0 +1,42 @@
+# Production environment values
+replicaCount: 2
+
+image:
+  repository: gcr.io/PROJECT_ID/tasks-app
+  tag: "prod-latest"
+  pullPolicy: IfNotPresent
+
+service:
+  type: LoadBalancer
+  port: 80
+  targetPort: 8000
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+ingress:
+  enabled: false
+
+env:
+  DB_HOST: "10.0.0.3"  # IP privée Cloud SQL (sera écrasée par le workflow)
+  DB_PORT: "3306"
+  DB_NAME: "tasksdb"  # Sera écrasé par le workflow
+  DB_USER: "app_user"
+
+configMap:
+  data:
+    LOG_LEVEL: "INFO"
+    ENVIRONMENT: "production"
+

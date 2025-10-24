@@ -2,15 +2,15 @@ name: Deploy to Production (Unified)
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
     inputs:
       force_deploy:
-        description: 'Force deployment (skip tests)'
+        description: "Force deployment (skip tests)"
         required: false
-        default: 'false'
+        default: false
         type: boolean
 
 permissions:
@@ -182,17 +182,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
-      
+          python-version: "3.11"
+
       - name: Install dependencies
         run: |
           cd app
           pip install -r requirements.txt
-      
+
       - name: Run tests
         run: |
           cd app
@@ -222,26 +222,26 @@ jobs:
       - name: Get Artifact Registry URL
         run: |
           echo "🔍 Recherche d'Artifact Registry dans le projet $PROJECT_ID..."
-          
+
           # Lister tous les repositories pour debug
           echo "📋 Repositories disponibles:"
           gcloud artifacts repositories list --project=$PROJECT_ID
-          
+
           # Récupérer le nom du repository
           REPO_NAME=$(gcloud artifacts repositories list --format="value(name)" --filter="format=DOCKER" --project=$PROJECT_ID | head -1)
-          
+
           if [ -n "$REPO_NAME" ]; then
             # Utiliser la région depuis les secrets
             REPO_LOCATION=$GCP_REGION
-            
+
             # Construire l'URL complète pour Docker (format correct)
             DOCKER_REGISTRY_URL="${REPO_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}"
-            
+
             echo "Debug - REPO_NAME: $REPO_NAME"
             echo "Debug - REPO_LOCATION: $REPO_LOCATION (depuis secret)"
             echo "Debug - PROJECT_ID: $PROJECT_ID"
             echo "Debug - URL construite: $DOCKER_REGISTRY_URL"
-            
+
             echo "ARTIFACT_REGISTRY_URL=$DOCKER_REGISTRY_URL" >> $GITHUB_ENV
             echo "REGISTRY=$DOCKER_REGISTRY_URL" >> $GITHUB_ENV
             echo "✅ Artifact Registry trouvé: $DOCKER_REGISTRY_URL"
@@ -257,11 +257,11 @@ jobs:
       - name: Configure Docker for Artifact Registry
         run: |
           echo "🔧 Configuration de Docker pour Artifact Registry..."
-          
+
           # Extraire le domaine du registry (ex: europe-west1-docker.pkg.dev)
           REGISTRY_DOMAIN=$(echo $REGISTRY | cut -d'/' -f1)
           echo "Registry Domain: $REGISTRY_DOMAIN"
-          
+
           # Configurer gcloud comme assistant d'identification pour le domaine
           gcloud auth configure-docker $REGISTRY_DOMAIN --quiet
           echo "✅ Docker configuré pour le domaine $REGISTRY_DOMAIN"
@@ -273,71 +273,137 @@ jobs:
           echo "Registry: $REGISTRY"
           echo "Image: $IMAGE_NAME"
           echo "Tag: $GITHUB_SHA"
-          
+
           # Construction de l'image avec le bon registry
           docker build -t $REGISTRY/$IMAGE_NAME:$GITHUB_SHA .
           docker tag $REGISTRY/$IMAGE_NAME:$GITHUB_SHA $REGISTRY/$IMAGE_NAME:prod-latest
-          
+
           echo "📤 Push vers Artifact Registry..."
           docker push $REGISTRY/$IMAGE_NAME:$GITHUB_SHA
           docker push $REGISTRY/$IMAGE_NAME:prod-latest
           echo "✅ Images poussées avec succès vers $REGISTRY"
 
-
   # ===== PHASE 4: KUBERNETES DEPLOYMENT =====
-  #deploy-prod:
-  #  name: Deploy to GKE
-  #  runs-on: ubuntu-latest
-  #  needs: [build-and-push]
-  #  if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-  #  environment: 
-  #    name: production
-  #    url: https://tasks-app-prod.example.com
-  #  steps:
-  #    - name: Checkout
-  #      uses: actions/checkout@v4
-#
-  #    - name: Auth to Google Cloud (WIF)
-  #      uses: google-github-actions/auth@v2
-  #      with:
-  #        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-  #        service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-#
-  #    - name: Set up Cloud SDK
-  #      uses: google-github-actions/setup-gcloud@v1
-#
-  #    - name: Get Artifact Registry URL
-  #      run: |
-  #        ARTIFACT_REGISTRY_URL=$(gcloud artifacts repositories list --format="value(name)" --filter="format=DOCKER" --project=$PROJECT_ID | head -1)
-  #        echo "REGISTRY=$ARTIFACT_REGISTRY_URL" >> $GITHUB_ENV
-#
-  #    - name: Configure kubectl
-  #      run: |
-  #        gcloud container clusters get-credentials $GKE_CLUSTER --zone $GKE_ZONE --project $PROJECT_ID
-#
-  #    - name: Install Helm
-  #      uses: azure/setup-helm@v3
-  #      with:
-  #        version: '3.12.0'
-#
-  #    - name: Get database password from Secret Manager
-  #      run: |
-  #        DB_PASSWORD=$(gcloud secrets versions access latest --secret="${INSTANCE_NAME}-app-db-password" --project=$PROJECT_ID)
-  #        echo "DB_PASSWORD=$DB_PASSWORD" >> $GITHUB_ENV
-#
-  #    - name: Deploy to GKE with Helm
-  #      run: |
-  #        helm upgrade --install tasks-app-prod ./helm/tasks-app \
-  #          --namespace tasks-prod \
-  #          --create-namespace \
-  #          --values ./helm/tasks-app/values-prod.yaml \
-  #          --set image.repository=$REGISTRY/$PROJECT_ID/$IMAGE_NAME \
-  #          --set image.tag=prod-latest \
-  #          --set secrets.dbPassword=$DB_PASSWORD \
-  #          --wait --timeout=5m
-#
-  #    - name: Verify deployment
-  #      run: |
-  #        kubectl get pods -n tasks-prod
-  #        kubectl get services -n tasks-prod
-  #        kubectl get ingress -n tasks-prod
+  deploy-prod:
+    name: Deploy to GKE
+    runs-on: ubuntu-latest
+    needs: [build-and-push]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    environment:
+      name: Production
+      url: https://tasks-app-prod.example.com
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Auth to Google Cloud (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+
+      - name: Install gke-gcloud-auth-plugin
+        run: |
+          echo "🔧 Installation du plugin gke-gcloud-auth-plugin..."
+          gcloud components install gke-gcloud-auth-plugin --quiet
+          echo "✅ Plugin gke-gcloud-auth-plugin installé"
+
+      - name: Get Artifact Registry URL
+        run: |
+          echo "🔍 Récupération de l'URL Artifact Registry..."
+          REPO_NAME=$(gcloud artifacts repositories list --format="value(name)" --filter="format=DOCKER" --project=$PROJECT_ID | head -1)
+          if [ -n "$REPO_NAME" ]; then
+            DOCKER_REGISTRY_URL="${GCP_REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}"
+            echo "REGISTRY=$DOCKER_REGISTRY_URL" >> $GITHUB_ENV
+            echo "✅ Artifact Registry URL: $DOCKER_REGISTRY_URL"
+          else
+            echo "❌ Aucun Artifact Registry trouvé !"
+            exit 1
+          fi
+
+      - name: Configure kubectl
+        run: |
+          echo "🔧 Configuration de kubectl..."
+
+          # Récupérer la location du cluster depuis GCP
+          CLUSTER_LOCATION=$(gcloud container clusters list \
+            --project=$PROJECT_ID \
+            --filter="name=$GKE_CLUSTER" \
+            --format="value(location)")
+
+          echo "📍 Emplacement du cluster: $CLUSTER_LOCATION"
+
+          # Vérifier si c'est une région ou une zone
+          if [[ $CLUSTER_LOCATION == *-*-[a-z] ]]; then
+            # Format comme europe-west9-c → cluster zoné
+            echo "🔸 Cluster zoné détecté"
+            gcloud container clusters get-credentials $GKE_CLUSTER \
+              --zone $CLUSTER_LOCATION \
+              --project $PROJECT_ID
+          else
+            # Format comme europe-west1 → cluster régional
+            echo "🔹 Cluster régional détecté"
+            gcloud container clusters get-credentials $GKE_CLUSTER \
+              --region $CLUSTER_LOCATION \
+              --project $PROJECT_ID
+          fi
+
+          echo "✅ kubectl configuré pour le cluster $GKE_CLUSTER en $CLUSTER_LOCATION"
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: "3.12.0"
+
+      - name: Get database password from Secret Manager
+        run: |
+          echo "🔐 Récupération des informations de connexion à la base de données..."
+
+          # Récupérer le nom de l'instance Cloud SQL dynamiquement
+          DB_INSTANCE_NAME=$(gcloud sql instances list --project=$PROJECT_ID --format="value(name)" | head -1)
+          echo "Instance Cloud SQL trouvée: $DB_INSTANCE_NAME"
+
+          # Récupérer l'IP privée de l'instance Cloud SQL
+          DB_HOST=$(gcloud sql instances describe $DB_INSTANCE_NAME --project=$PROJECT_ID --format="value(ipAddresses[0].ipAddress)")
+          echo "DB_HOST=$DB_HOST" >> $GITHUB_ENV
+          echo "✅ IP de la base de données: $DB_HOST"
+
+          # Récupérer le nom de la base de données
+          echo "DB_NAME=tasksdb" >> $GITHUB_ENV
+
+          # Récupérer le mot de passe depuis Secret Manager
+          DB_PASSWORD=$(gcloud secrets versions access latest --secret="${DB_INSTANCE_NAME}-app-db-password" --project=$PROJECT_ID)
+          echo "DB_PASSWORD=$DB_PASSWORD" >> $GITHUB_ENV
+          echo "✅ Mot de passe récupéré depuis Secret Manager pour l'instance $DB_INSTANCE_NAME"
+
+      - name: Deploy to GKE with Helm
+        run: |
+          echo "🚀 Déploiement sur GKE avec Helm..."
+          echo "  📦 Image: $REGISTRY/$IMAGE_NAME:prod-latest"
+          echo "  🗄️  DB Host: $DB_HOST"
+          echo "  📊 DB Name: $DB_NAME"
+
+          helm upgrade --install tasks-app-prod ./helm/tasks-app \
+            --namespace tasks-prod \
+            --create-namespace \
+            --values ./helm/tasks-app/values-prod.yaml \
+            --set image.repository="$REGISTRY/$IMAGE_NAME" \
+            --set-string image.tag=prod-latest \
+            --set-string env.DB_HOST=$DB_HOST \
+            --set-string env.DB_NAME=$DB_NAME \
+            --set-string env.DB_USER=tasks_app \
+            --set-string secrets.dbPassword="$DB_PASSWORD" \
+            --wait --timeout=10m \
+            --debug --atomic
+          echo "✅ Déploiement terminé"
+
+      - name: Verify deployment
+        run: |
+          echo "🔍 Vérification du déploiement..."
+          kubectl get pods -n tasks-prod
+          kubectl get services -n tasks-prod
+          kubectl get ingress -n tasks-prod
+          echo "✅ Vérification terminée"
