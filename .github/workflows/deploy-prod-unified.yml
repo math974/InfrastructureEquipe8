@@ -66,7 +66,7 @@ jobs:
         run: |
           cd terraform
           terraform init \
-            -backend-config=../configs/prod.config
+            -backend-config=../configs/prd.config
 
       - name: Terraform Format Check
         run: |
@@ -115,7 +115,7 @@ jobs:
         run: |
           cd terraform
           terraform init \
-            -backend-config=../configs/prod.config
+            -backend-config=../configs/prd.config
 
       - name: Terraform Plan (env prod)
         run: |
@@ -161,7 +161,7 @@ jobs:
         run: |
           cd terraform
           terraform init \
-            -backend-config=../configs/prod.config
+            -backend-config=../configs/prd.config
 
       - name: Terraform Apply (env prod)
         run: |
