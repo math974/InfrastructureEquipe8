@@ -322,8 +322,16 @@ jobs:
 #
   #    - name: Get database password from Secret Manager
   #      run: |
-  #        DB_PASSWORD=$(gcloud secrets versions access latest --secret="${INSTANCE_NAME}-app-db-password" --project=$PROJECT_ID)
+  #        echo "🔐 Récupération du mot de passe de la base de données..."
+  #        
+  #        # Récupérer le nom de l'instance Cloud SQL dynamiquement
+  #        DB_INSTANCE_NAME=$(gcloud sql instances list --project=$PROJECT_ID --format="value(name)" | head -1)
+  #        echo "Instance Cloud SQL trouvée: $DB_INSTANCE_NAME"
+  #        
+  #        # Récupérer le mot de passe depuis Secret Manager
+  #        DB_PASSWORD=$(gcloud secrets versions access latest --secret="${DB_INSTANCE_NAME}-app-db-password" --project=$PROJECT_ID)
   #        echo "DB_PASSWORD=$DB_PASSWORD" >> $GITHUB_ENV
+  #        echo "✅ Mot de passe récupéré depuis Secret Manager pour l'instance $DB_INSTANCE_NAME"
 #
   #    - name: Deploy to GKE with Helm
   #      run: |
