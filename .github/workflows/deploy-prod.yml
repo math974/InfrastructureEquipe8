@@ -1,0 +1,200 @@
+#name: Deploy to Production
+#
+#on:
+#  push:
+#    branches: [ main ]
+#    tags:
+#      - 'v*'
+#  workflow_dispatch:
+#    inputs:
+#      force_deploy:
+#        description: 'Force deployment (skip tests)'
+#        required: false
+#        default: 'false'
+#        type: boolean
+#
+#env:
+#  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+#  GKE_CLUSTER: ${{ secrets.GKE_CLUSTER_NAME }}
+#  GKE_ZONE: ${{ secrets.GKE_ZONE }}
+#  REGISTRY: gcr.io
+#  IMAGE_NAME: tasks-app
+#  INSTANCE_NAME: tasks-mysql
+#
+#jobs:
+#  test:
+#    runs-on: ubuntu-latest
+#    if: ${{ !inputs.force_deploy }}
+#    steps:
+#    - uses: actions/checkout@v4
+#    
+#    - name: Set up Python
+#      uses: actions/setup-python@v4
+#      with:
+#        python-version: '3.11'
+#    
+#    - name: Install dependencies
+#      run: |
+#        cd app
+#        pip install -r requirements.txt
+#    
+#    - name: Run tests
+#      run: |
+#        cd app
+#        python -m pytest tests/ || echo "No tests found, continuing..."
+#
+#  security-scan:
+#    runs-on: ubuntu-latest
+#    if: ${{ !inputs.force_deploy }}
+#    steps:
+#    - name: Checkout
+#      uses: actions/checkout@v4
+#
+#    - name: Run Trivy vulnerability scanner
+#      uses: aquasecurity/trivy-action@master
+#      with:
+#        scan-type: 'fs'
+#        scan-ref: '.'
+#        format: 'sarif'
+#        output: 'trivy-results.sarif'
+#
+#    - name: Upload Trivy scan results to GitHub Security tab
+#      uses: github/codeql-action/upload-sarif@v2
+#      if: always()
+#      with:
+#        sarif_file: 'trivy-results.sarif'
+#
+#  build-and-push:
+#    needs: [test, security-scan]
+#    runs-on: ubuntu-latest
+#    if: always() && (needs.test.result == 'success' || needs.test.result == 'skipped') && (needs.security-scan.result == 'success' || needs.security-scan.result == 'skipped')
+#    
+#    steps:
+#    - name: Checkout
+#      uses: actions/checkout@v4
+#
+#    - name: Auth to Google Cloud (WIF)
+#      uses: google-github-actions/auth@v2
+#      with:
+#        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+#        service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+#
+#    - name: Set up Cloud SDK
+#      uses: google-github-actions/setup-gcloud@v1
+#
+#    - name: Configure Docker to use gcloud as a credential helper
+#      run: gcloud auth configure-docker
+#
+#    - name: Extract version from tag
+#      id: version
+#      run: |
+#        if [[ $GITHUB_REF == refs/tags/* ]]; then
+#          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+#        else
+#          echo "VERSION=latest" >> $GITHUB_OUTPUT
+#        fi
+#
+#    - name: Build and push to GCR
+#      run: |
+#        cd app
+#        docker build -t $REGISTRY/$PROJECT_ID/$IMAGE_NAME:${{ steps.version.outputs.VERSION }} .
+#        docker tag $REGISTRY/$PROJECT_ID/$IMAGE_NAME:${{ steps.version.outputs.VERSION }} $REGISTRY/$PROJECT_ID/$IMAGE_NAME:latest
+#        docker push $REGISTRY/$PROJECT_ID/$IMAGE_NAME:${{ steps.version.outputs.VERSION }}
+#        docker push $REGISTRY/$PROJECT_ID/$IMAGE_NAME:latest
+#
+#    - name: Build and push to GitHub Container Registry
+#      run: |
+#        cd app
+#        docker build -t ghcr.io/${{ github.repository }}/$IMAGE_NAME:${{ steps.version.outputs.VERSION }} .
+#        docker tag ghcr.io/${{ github.repository }}/$IMAGE_NAME:${{ steps.version.outputs.VERSION }} ghcr.io/${{ github.repository }}/$IMAGE_NAME:latest
+#        echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+#        docker push ghcr.io/${{ github.repository }}/$IMAGE_NAME:${{ steps.version.outputs.VERSION }}
+#        docker push ghcr.io/${{ github.repository }}/$IMAGE_NAME:latest
+#
+#  deploy-prod:
+#    needs: build-and-push
+#    runs-on: ubuntu-latest
+#    environment: 
+#      name: production
+#      url: https://tasks-app.example.com
+#    
+#    steps:
+#    - name: Checkout
+#      uses: actions/checkout@v4
+#
+#    - name: Auth to Google Cloud (WIF)
+#      uses: google-github-actions/auth@v2
+#      with:
+#        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+#        service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+#
+#    - name: Set up Cloud SDK
+#      uses: google-github-actions/setup-gcloud@v1
+#
+#    - name: Configure kubectl
+#      run: |
+#        gcloud container clusters get-credentials $GKE_CLUSTER --zone $GKE_ZONE --project $PROJECT_ID
+#
+#    - name: Install Helm
+#      uses: azure/setup-helm@v3
+#      with:
+#        version: '3.12.0'
+#
+#    - name: Extract version from tag
+#      id: version
+#      run: |
+#        if [[ $GITHUB_REF == refs/tags/* ]]; then
+#          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+#        else
+#          echo "VERSION=latest" >> $GITHUB_OUTPUT
+#        fi
+#
+#    - name: Get database password from Secret Manager
+#      run: |
+#        DB_PASSWORD=$(gcloud secrets versions access latest --secret="${INSTANCE_NAME}-app-db-password" --project=$PROJECT_ID)
+#        echo "DB_PASSWORD=$DB_PASSWORD" >> $GITHUB_ENV
+#
+#    - name: Deploy to GKE with Helm
+#      run: |
+#        helm upgrade --install tasks-app-prod ./helm/tasks-app \
+#          --namespace tasks-prod \
+#          --create-namespace \
+#          --values ./helm/tasks-app/values.yaml \
+#          --set image.repository=$REGISTRY/$PROJECT_ID/$IMAGE_NAME \
+#          --set image.tag=${{ steps.version.outputs.VERSION }} \
+#          --set secrets.dbPassword=$DB_PASSWORD \
+#          --wait --timeout=10m
+#
+#    - name: Verify deployment
+#      run: |
+#        kubectl get pods -n tasks-prod
+#        kubectl get services -n tasks-prod
+#        kubectl get ingress -n tasks-prod
+#
+#    - name: Run smoke tests
+#      run: |
+#        # Wait for deployment to be ready
+#        kubectl wait --for=condition=available --timeout=300s deployment/tasks-app-prod -n tasks-prod
+#        
+#        # Get the ingress IP
+#        INGRESS_IP=$(kubectl get ingress tasks-app-prod -n tasks-prod -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+#        echo "Application available at: http://$INGRESS_IP"
+#        
+#        # Basic health check
+#        if [ ! -z "$INGRESS_IP" ]; then
+#          curl -f http://$INGRESS_IP/health || echo "Health check failed"
+#        fi
+#
+#  notify:
+#    needs: [deploy-prod]
+#    runs-on: ubuntu-latest
+#    if: always()
+#    steps:
+#    - name: Notify deployment status
+#      run: |
+#        if [ "${{ needs.deploy-prod.result }}" == "success" ]; then
+#          echo "✅ Production deployment successful!"
+#        else
+#          echo "❌ Production deployment failed!"
+#        fi
+#

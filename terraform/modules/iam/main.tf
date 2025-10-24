@@ -110,8 +110,13 @@ resource "google_project_iam_member" "gke_nodes_cloudsql_client" {
   member  = "serviceAccount:${google_service_account.gke_nodes.email}"
 }
 
+# Les permissions pour GitHub Actions sont gérées via Workload Identity Federation
+# dans le module bootstrap-wif/
+
 # Output email SA nœuds
 output "gke_nodes_service_account_email" {
   description = "Email du service account utilisé par les nœuds GKE"
   value       = google_service_account.gke_nodes.email
 }
+
+# Les outputs pour GitHub Actions sont gérés dans bootstrap-wif/

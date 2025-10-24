@@ -1,0 +1,40 @@
+# Development environment values
+replicaCount: 1
+
+image:
+  repository: gcr.io/PROJECT_ID/tasks-app
+  tag: "dev-latest"
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+autoscaling:
+  enabled: false
+
+ingress:
+  enabled: true
+  hosts:
+    - host: tasks-app-dev.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: tasks-app-dev-tls
+      hosts:
+        - tasks-app-dev.example.com
+
+env:
+  DB_HOST: "mysql-dev-service"
+  DB_PORT: "3306"
+  DB_NAME: "tasksdb_dev"
+  DB_USER: "app_user"
+
+configMap:
+  data:
+    LOG_LEVEL: "DEBUG"
+    ENVIRONMENT: "development"

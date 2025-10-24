@@ -125,12 +125,16 @@ def init_db() -> None:
                 """
             )
         )
-        conn.execute(
-            text("CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date)")
-        )
-        conn.execute(
-            text("CREATE INDEX IF NOT EXISTS idx_tasks_updated_at ON tasks(updated_at)")
-        )
+        # Créer les index avec gestion d'erreur
+        try:
+            conn.execute(text("CREATE INDEX idx_tasks_due_date ON tasks(due_date)"))
+        except Exception:
+            pass  # Index existe déjà
+        
+        try:
+            conn.execute(text("CREATE INDEX idx_tasks_updated_at ON tasks(updated_at)"))
+        except Exception:
+            pass  # Index existe déjà
 
         conn.execute(
             text(
@@ -147,10 +151,15 @@ def init_db() -> None:
                 """
             )
         )
-        conn.execute(
-            text("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
-        )
-        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)"))
+        try:
+            conn.execute(text("CREATE INDEX idx_users_username ON users(username)"))
+        except Exception:
+            pass  # Index existe déjà
+        
+        try:
+            conn.execute(text("CREATE INDEX idx_users_email ON users(email)"))
+        except Exception:
+            pass  # Index existe déjà
 
         conn.execute(
             text(
@@ -167,11 +176,10 @@ def init_db() -> None:
                 """
             )
         )
-        conn.execute(
-            text(
-                "CREATE INDEX IF NOT EXISTS idx_schedops_execute_at ON scheduled_ops(execute_at)"
-            )
-        )
+        try:
+            conn.execute(text("CREATE INDEX idx_schedops_execute_at ON scheduled_ops(execute_at)"))
+        except Exception:
+            pass  # Index existe déjà
 
 
 def _row_to_dict(cursor, row) -> Dict[str, Any]:

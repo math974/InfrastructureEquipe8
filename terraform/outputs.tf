@@ -38,3 +38,5 @@ output "deployment_info" {
     environment  = var.environment
   }
 }
+
+# Les outputs pour GitHub Actions sont gérés dans bootstrap-wif/
