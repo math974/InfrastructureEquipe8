@@ -6,6 +6,11 @@ on:
   pull_request:
     branches-ignore: [ main ]
 
+permissions:
+  contents: read
+  id-token: write
+  packages: write
+
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   GKE_CLUSTER: ${{ secrets.GKE_CLUSTER_NAME }}
