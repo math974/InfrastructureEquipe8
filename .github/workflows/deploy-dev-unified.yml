@@ -313,8 +313,31 @@ jobs:
       - name: Configure kubectl
         run: |
           echo "🔧 Configuration de kubectl..."
-          gcloud container clusters get-credentials $GKE_CLUSTER --zone $GKE_ZONE --project $PROJECT_ID
-          echo "✅ kubectl configuré pour le cluster $GKE_CLUSTER"
+          
+          # Récupérer la location du cluster depuis GCP
+          CLUSTER_LOCATION=$(gcloud container clusters list \
+            --project=$PROJECT_ID \
+            --filter="name=$GKE_CLUSTER" \
+            --format="value(location)")
+
+          echo "📍 Emplacement du cluster: $CLUSTER_LOCATION"
+
+          # Vérifier si c'est une région ou une zone
+          if [[ $CLUSTER_LOCATION == *-*-[a-z] ]]; then
+            # Format comme europe-west9-c → cluster zoné
+            echo "🔸 Cluster zoné détecté"
+            gcloud container clusters get-credentials $GKE_CLUSTER \
+              --zone $CLUSTER_LOCATION \
+              --project $PROJECT_ID
+          else
+            # Format comme europe-west1 → cluster régional
+            echo "🔹 Cluster régional détecté"
+            gcloud container clusters get-credentials $GKE_CLUSTER \
+              --region $CLUSTER_LOCATION \
+              --project $PROJECT_ID
+          fi
+          
+          echo "✅ kubectl configuré pour le cluster $GKE_CLUSTER en $CLUSTER_LOCATION"
 
       - name: Install Helm
         uses: azure/setup-helm@v3
