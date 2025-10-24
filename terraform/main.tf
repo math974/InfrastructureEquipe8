@@ -64,13 +64,13 @@ module "database" {
 module "artifact_registry" {
   source = "./modules/artifact-registry"
 
-  project_id   = var.project_id
-  region       = var.region
-  environment  = var.environment
+  project_id      = var.project_id
+  region          = var.region
+  environment     = var.environment
   repository_name = var.artifact_registry_config.repository_name
 
   # Configuration de rétention
-  retention_days = var.artifact_registry_config.retention_days
+  retention_days   = var.artifact_registry_config.retention_days
   cleanup_policies = var.artifact_registry_config.cleanup_policies
 }
 

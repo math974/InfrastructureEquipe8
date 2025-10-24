@@ -49,7 +49,11 @@ jobs:
   build-and-push:
     needs: test
     runs-on: ubuntu-latest
-    if: github.ref != 'refs/heads/main' && (github.event_name == 'workflow_run' || github.event_name == 'push')
+    if: |
+      github.ref != 'refs/heads/main' && (
+        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+        github.event_name == 'push'
+      )
     environment:
       name: Develop
 
@@ -69,28 +73,41 @@ jobs:
     - name: Get Artifact Registry URL
       run: |
         # Obtenir l'URL d'Artifact Registry depuis Terraform
+        echo "🔍 Recherche d'Artifact Registry dans le projet $PROJECT_ID..."
         ARTIFACT_REGISTRY_URL=$(gcloud artifacts repositories list --format="value(name)" --filter="format=DOCKER" --project=$PROJECT_ID | head -1)
+        
         if [ -n "$ARTIFACT_REGISTRY_URL" ]; then
           echo "ARTIFACT_REGISTRY_URL=$ARTIFACT_REGISTRY_URL" >> $GITHUB_ENV
           echo "REGISTRY=$ARTIFACT_REGISTRY_URL" >> $GITHUB_ENV
           echo "✅ Artifact Registry trouvé: $ARTIFACT_REGISTRY_URL"
         else
-          echo "⚠️  Aucun Artifact Registry trouvé, utilisation de GCR"
-          echo "REGISTRY=gcr.io" >> $GITHUB_ENV
+          echo "❌ Aucun Artifact Registry trouvé !"
+          echo "Vérifiez que Terraform a été déployé avec succès."
+          exit 1
         fi
 
-    - name: Configure Docker to use gcloud as a credential helper
-      run: gcloud auth configure-docker
+    - name: Configure Docker for Artifact Registry
+      run: |
+        echo "🔧 Configuration de Docker pour Artifact Registry..."
+        gcloud auth configure-docker $REGISTRY --quiet
+        echo "✅ Docker configuré pour $REGISTRY"
 
     - name: Build and push to Artifact Registry
       run: |
         cd app
-        # Configuration de l'authentification pour Artifact Registry
-        gcloud auth configure-docker $REGISTRY --quiet
+        echo "🐳 Construction de l'image Docker..."
+        echo "Registry: $REGISTRY"
+        echo "Image: $IMAGE_NAME"
+        echo "Tag: $GITHUB_SHA"
+        
+        # Construction de l'image avec le bon registry
         docker build -t $REGISTRY/$IMAGE_NAME:$GITHUB_SHA .
         docker tag $REGISTRY/$IMAGE_NAME:$GITHUB_SHA $REGISTRY/$IMAGE_NAME:dev-latest
+        
+        echo "📤 Push vers Artifact Registry..."
         docker push $REGISTRY/$IMAGE_NAME:$GITHUB_SHA
         docker push $REGISTRY/$IMAGE_NAME:dev-latest
+        echo "✅ Images poussées avec succès vers $REGISTRY"
 
     - name: Build and push to GitHub Container Registry
       run: |

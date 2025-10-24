@@ -106,7 +106,7 @@ variable "artifact_registry_config" {
   description = "Configuration pour Artifact Registry"
   type = object({
     repository_name = optional(string, "tasks-app")
-    retention_days = optional(number, 7)
+    retention_days  = optional(number, 7)
     cleanup_policies = optional(list(object({
       id     = string
       action = string
