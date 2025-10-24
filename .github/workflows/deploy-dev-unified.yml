@@ -215,19 +215,26 @@ jobs:
         run: |
           echo "🔍 Recherche d'Artifact Registry dans le projet $PROJECT_ID..."
           
-          # Récupérer les informations du repository
-          REPO_INFO=$(gcloud artifacts repositories list --format="value(name,location)" --filter="format=DOCKER" --project=$PROJECT_ID | head -1)
+          # Lister tous les repositories pour debug
+          echo "📋 Repositories disponibles:"
+          gcloud artifacts repositories list --project=$PROJECT_ID
           
-          if [ -n "$REPO_INFO" ]; then
-            REPO_NAME=$(echo $REPO_INFO | cut -d' ' -f1)
-            REPO_LOCATION=$(echo $REPO_INFO | cut -d' ' -f2)
+          # Récupérer le nom du repository
+          REPO_NAME=$(gcloud artifacts repositories list --format="value(name)" --filter="format=DOCKER" --project=$PROJECT_ID | head -1)
+          
+          if [ -n "$REPO_NAME" ]; then
+            # Récupérer la région du repository
+            REPO_LOCATION=$(gcloud artifacts repositories describe $REPO_NAME --project=$PROJECT_ID --format="value(location)")
             
-            # Construire l'URL complète du repository
-            ARTIFACT_REGISTRY_URL="${REPO_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}"
+            # Construire l'URL complète pour Docker
+            DOCKER_REGISTRY_URL="${REPO_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}"
             
-            echo "ARTIFACT_REGISTRY_URL=$ARTIFACT_REGISTRY_URL" >> $GITHUB_ENV
-            echo "REGISTRY=$ARTIFACT_REGISTRY_URL" >> $GITHUB_ENV
-            echo "✅ Artifact Registry trouvé: $ARTIFACT_REGISTRY_URL"
+            echo "ARTIFACT_REGISTRY_URL=$DOCKER_REGISTRY_URL" >> $GITHUB_ENV
+            echo "REGISTRY=$DOCKER_REGISTRY_URL" >> $GITHUB_ENV
+            echo "✅ Artifact Registry trouvé: $DOCKER_REGISTRY_URL"
+            echo "Repository: $REPO_NAME"
+            echo "Location: $REPO_LOCATION"
+            echo "Docker Registry: $DOCKER_REGISTRY_URL"
           else
             echo "❌ Aucun Artifact Registry trouvé !"
             echo "Vérifiez que Terraform a été déployé avec succès."
@@ -237,8 +244,14 @@ jobs:
       - name: Configure Docker for Artifact Registry
         run: |
           echo "🔧 Configuration de Docker pour Artifact Registry..."
-          gcloud auth configure-docker $REGISTRY --quiet
-          echo "✅ Docker configuré pour $REGISTRY"
+          
+          # Extraire le domaine du registry (ex: europe-west1-docker.pkg.dev)
+          REGISTRY_DOMAIN=$(echo $REGISTRY | cut -d'/' -f1)
+          echo "Registry Domain: $REGISTRY_DOMAIN"
+          
+          # Configurer gcloud comme assistant d'identification pour le domaine
+          gcloud auth configure-docker $REGISTRY_DOMAIN --quiet
+          echo "✅ Docker configuré pour le domaine $REGISTRY_DOMAIN"
 
       - name: Build and push to Artifact Registry
         run: |
