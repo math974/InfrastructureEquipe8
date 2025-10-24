@@ -219,12 +219,13 @@ jobs:
           echo "📋 Repositories disponibles:"
           gcloud artifacts repositories list --project=$PROJECT_ID
           
-          # Récupérer le nom du repository
-          REPO_NAME=$(gcloud artifacts repositories list --format="value(name)" --filter="format=DOCKER" --project=$PROJECT_ID | head -1)
+          # Récupérer les informations du repository (nom et région)
+          REPO_INFO=$(gcloud artifacts repositories list --format="value(name,location)" --filter="format=DOCKER" --project=$PROJECT_ID | head -1)
           
-          if [ -n "$REPO_NAME" ]; then
-            # Récupérer la région du repository
-            REPO_LOCATION=$(gcloud artifacts repositories describe $REPO_NAME --project=$PROJECT_ID --format="value(location)")
+          if [ -n "$REPO_INFO" ]; then
+            # Extraire le nom et la région
+            REPO_NAME=$(echo $REPO_INFO | cut -d' ' -f1)
+            REPO_LOCATION=$(echo $REPO_INFO | cut -d' ' -f2)
             
             # Construire l'URL complète pour Docker
             DOCKER_REGISTRY_URL="${REPO_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}"
