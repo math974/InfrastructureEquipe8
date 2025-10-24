@@ -57,7 +57,7 @@ spec:
             - name: {{ $key }}
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "tasks-app.fullname" . }}-config
+                  name: {{ include "tasks-app.fullname" $ }}-config
                   key: {{ $key }}
             {{- end }}
             {{- end }}
