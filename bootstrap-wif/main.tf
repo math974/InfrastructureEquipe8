@@ -64,3 +64,11 @@ resource "google_service_account_iam_member" "wif_binding" {
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.pool.name}/attribute.repository/${var.github_owner}/${var.github_repo}"
 }
+
+# Rôles de facturation (doivent être assignés au niveau du compte de facturation, pas du projet)
+resource "google_billing_account_iam_member" "sa_billing_admin" {
+  count              = var.billing_account_id != "" ? 1 : 0
+  billing_account_id = var.billing_account_id
+  role               = "roles/billing.admin"
+  member             = "serviceAccount:${google_service_account.sa.email}"
+}

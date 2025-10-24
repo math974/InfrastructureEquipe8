@@ -4,6 +4,12 @@ replicaCount: 1
 image:
   repository: gcr.io/PROJECT_ID/tasks-app
   tag: "dev-latest"
+  pullPolicy: IfNotPresent
+
+service:
+  type: LoadBalancer
+  port: 80
+  targetPort: 8000
 
 resources:
   limits:
@@ -17,16 +23,7 @@ autoscaling:
   enabled: false
 
 ingress:
-  enabled: true
-  hosts:
-    - host: tasks-app-dev.example.com
-      paths:
-        - path: /
-          pathType: Prefix
-  tls:
-    - secretName: tasks-app-dev-tls
-      hosts:
-        - tasks-app-dev.example.com
+  enabled: false
 
 env:
   DB_HOST: "mysql-dev-service"

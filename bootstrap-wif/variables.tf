@@ -3,6 +3,12 @@ variable "project_id" {
   type        = string
 }
 
+variable "billing_account_id" {
+  description = "ID du compte de facturation GCP (optionnel, nécessaire pour les rôles billing)"
+  type        = string
+  default     = ""
+}
+
 variable "environment" {
   description = "Environnement (dev ou prd)"
   type        = string
