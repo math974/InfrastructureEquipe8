@@ -276,19 +276,6 @@ jobs:
           docker push $REGISTRY/$IMAGE_NAME:dev-latest
           echo "✅ Images poussées avec succès vers $REGISTRY"
 
-      - name: Build and push to GitHub Container Registry
-        run: |
-          cd app
-          # Convertir le nom du repository en minuscules pour Docker
-          REPO_NAME_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          echo "Repository name (lowercase): $REPO_NAME_LOWER"
-          
-          docker build -t ghcr.io/$REPO_NAME_LOWER/$IMAGE_NAME:$GITHUB_SHA .
-          docker tag ghcr.io/$REPO_NAME_LOWER/$IMAGE_NAME:$GITHUB_SHA ghcr.io/$REPO_NAME_LOWER/$IMAGE_NAME:dev-latest
-          echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-          docker push ghcr.io/$REPO_NAME_LOWER/$IMAGE_NAME:$GITHUB_SHA
-          docker push ghcr.io/$REPO_NAME_LOWER/$IMAGE_NAME:dev-latest
-
   # ===== PHASE 4: KUBERNETES DEPLOYMENT =====
   #deploy-dev:
   #  name: Deploy to GKE
