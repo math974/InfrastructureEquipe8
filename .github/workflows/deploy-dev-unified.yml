@@ -214,9 +214,17 @@ jobs:
       - name: Get Artifact Registry URL
         run: |
           echo "🔍 Recherche d'Artifact Registry dans le projet $PROJECT_ID..."
-          ARTIFACT_REGISTRY_URL=$(gcloud artifacts repositories list --format="value(name)" --filter="format=DOCKER" --project=$PROJECT_ID | head -1)
           
-          if [ -n "$ARTIFACT_REGISTRY_URL" ]; then
+          # Récupérer les informations du repository
+          REPO_INFO=$(gcloud artifacts repositories list --format="value(name,location)" --filter="format=DOCKER" --project=$PROJECT_ID | head -1)
+          
+          if [ -n "$REPO_INFO" ]; then
+            REPO_NAME=$(echo $REPO_INFO | cut -d' ' -f1)
+            REPO_LOCATION=$(echo $REPO_INFO | cut -d' ' -f2)
+            
+            # Construire l'URL complète du repository
+            ARTIFACT_REGISTRY_URL="${REPO_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}"
+            
             echo "ARTIFACT_REGISTRY_URL=$ARTIFACT_REGISTRY_URL" >> $GITHUB_ENV
             echo "REGISTRY=$ARTIFACT_REGISTRY_URL" >> $GITHUB_ENV
             echo "✅ Artifact Registry trouvé: $ARTIFACT_REGISTRY_URL"
