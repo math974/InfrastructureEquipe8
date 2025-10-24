@@ -63,6 +63,6 @@ team_member_emails = [
 ]
 team_role                 = "roles/editor"
 instructor_email          = "jeremie@jjaouen.com"
-enable_instructor_binding = true
+enable_instructor_binding = false
 auto_invite_missing_users = true
 billing_account_id        = "0100E9-D328A7-35D6BE"
