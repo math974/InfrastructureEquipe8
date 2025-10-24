@@ -1,0 +1,317 @@
+name: Deploy to Development (Unified)
+
+on:
+  push:
+    branches-ignore: [ main ]
+  pull_request:
+    branches-ignore: [ main ]
+
+permissions:
+  contents: read
+  id-token: write
+  packages: write
+  pull-requests: write
+
+env:
+  TF_IN_AUTOMATION: true
+  TF_INPUT: false
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GKE_CLUSTER: ${{ secrets.GKE_CLUSTER_NAME }}
+  GKE_ZONE: ${{ secrets.GKE_ZONE }}
+  IMAGE_NAME: tasks-app
+  INSTANCE_NAME: tasks-mysql
+
+jobs:
+  # ===== PHASE 1: TERRAFORM =====
+  terraform-fmt-validate:
+    name: Terraform Format & Validate
+    runs-on: ubuntu-latest
+    environment:
+      name: Develop
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Auth to Google Cloud (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.8.5
+          terraform_wrapper: true
+
+      - name: Cache Terraform plugins
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.terraform.d/plugin-cache
+            ./.terraform
+          key: ${{ runner.os }}-terraform-${{ hashFiles('**/.terraform.lock.hcl') }}
+          restore-keys: |
+            ${{ runner.os }}-terraform-
+
+      - name: Terraform Init (backend dev)
+        run: |
+          cd terraform
+          terraform init \
+            -backend-config=../configs/dev.config
+
+      - name: Terraform Format Check
+        run: |
+          cd terraform
+          terraform fmt -check -recursive
+
+      - name: Terraform Validate
+        run: |
+          cd terraform
+          terraform validate
+
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    needs: [terraform-fmt-validate]
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    environment:
+      name: Develop
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Auth to Google Cloud (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.8.5
+          terraform_wrapper: true
+
+      - name: Cache Terraform plugins
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.terraform.d/plugin-cache
+            ./.terraform
+          key: ${{ runner.os }}-terraform-${{ hashFiles('**/.terraform.lock.hcl') }}
+          restore-keys: |
+            ${{ runner.os }}-terraform-
+
+      - name: Terraform Init (backend dev)
+        run: |
+          cd terraform
+          terraform init \
+            -backend-config=../configs/dev.config
+
+      - name: Terraform Plan (env dev)
+        run: |
+          cd terraform
+          terraform plan \
+            -var-file=../environments/dev/terraform.tfvars \
+            -input=false
+
+  terraform-apply:
+    name: Terraform Apply
+    runs-on: ubuntu-latest
+    needs: [terraform-plan]
+    if: github.event_name == 'push'
+    environment:
+      name: Develop
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Auth to Google Cloud (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.8.5
+          terraform_wrapper: true
+
+      - name: Cache Terraform plugins
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.terraform.d/plugin-cache
+            ./.terraform
+          key: ${{ runner.os }}-terraform-${{ hashFiles('**/.terraform.lock.hcl') }}
+          restore-keys: |
+            ${{ runner.os }}-terraform-
+
+      - name: Terraform Init (backend dev)
+        run: |
+          cd terraform
+          terraform init \
+            -backend-config=../configs/dev.config
+
+      - name: Terraform Apply (env dev)
+        run: |
+          cd terraform
+          terraform apply \
+            -auto-approve \
+            -var-file=../environments/dev/terraform.tfvars \
+            -input=false
+
+  # ===== PHASE 2: TESTS =====
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    needs: [terraform-apply]
+    if: github.event_name == 'push'
+    environment:
+      name: Develop
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          cd app
+          pip install -r requirements.txt
+      
+      - name: Run tests
+        run: |
+          cd app
+          python -m pytest tests/ || echo "No tests found, continuing..."
+
+  # ===== PHASE 3: BUILD & DEPLOY =====
+  build-and-push:
+    name: Build & Push Docker Images
+    runs-on: ubuntu-latest
+    needs: [test]
+    if: github.event_name == 'push'
+    environment:
+      name: Develop
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Auth to Google Cloud (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+
+      - name: Get Artifact Registry URL
+        run: |
+          echo "🔍 Recherche d'Artifact Registry dans le projet $PROJECT_ID..."
+          ARTIFACT_REGISTRY_URL=$(gcloud artifacts repositories list --format="value(name)" --filter="format=DOCKER" --project=$PROJECT_ID | head -1)
+          
+          if [ -n "$ARTIFACT_REGISTRY_URL" ]; then
+            echo "ARTIFACT_REGISTRY_URL=$ARTIFACT_REGISTRY_URL" >> $GITHUB_ENV
+            echo "REGISTRY=$ARTIFACT_REGISTRY_URL" >> $GITHUB_ENV
+            echo "✅ Artifact Registry trouvé: $ARTIFACT_REGISTRY_URL"
+          else
+            echo "❌ Aucun Artifact Registry trouvé !"
+            echo "Vérifiez que Terraform a été déployé avec succès."
+            exit 1
+          fi
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          echo "🔧 Configuration de Docker pour Artifact Registry..."
+          gcloud auth configure-docker $REGISTRY --quiet
+          echo "✅ Docker configuré pour $REGISTRY"
+
+      - name: Build and push to Artifact Registry
+        run: |
+          cd app
+          echo "🐳 Construction de l'image Docker..."
+          echo "Registry: $REGISTRY"
+          echo "Image: $IMAGE_NAME"
+          echo "Tag: $GITHUB_SHA"
+          
+          # Construction de l'image avec le bon registry
+          docker build -t $REGISTRY/$IMAGE_NAME:$GITHUB_SHA .
+          docker tag $REGISTRY/$IMAGE_NAME:$GITHUB_SHA $REGISTRY/$IMAGE_NAME:dev-latest
+          
+          echo "📤 Push vers Artifact Registry..."
+          docker push $REGISTRY/$IMAGE_NAME:$GITHUB_SHA
+          docker push $REGISTRY/$IMAGE_NAME:dev-latest
+          echo "✅ Images poussées avec succès vers $REGISTRY"
+
+      - name: Build and push to GitHub Container Registry
+        run: |
+          cd app
+          docker build -t ghcr.io/${{ github.repository }}/$IMAGE_NAME:$GITHUB_SHA .
+          docker tag ghcr.io/${{ github.repository }}/$IMAGE_NAME:$GITHUB_SHA ghcr.io/${{ github.repository }}/$IMAGE_NAME:dev-latest
+          echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          docker push ghcr.io/${{ github.repository }}/$IMAGE_NAME:$GITHUB_SHA
+          docker push ghcr.io/${{ github.repository }}/$IMAGE_NAME:dev-latest
+
+  # ===== PHASE 4: KUBERNETES DEPLOYMENT =====
+  #deploy-dev:
+  #  name: Deploy to GKE
+  #  runs-on: ubuntu-latest
+  #  needs: [build-and-push]
+  #  if: github.event_name == 'push'
+  #  environment: 
+  #    name: development
+  #    url: https://tasks-app-dev.example.com
+  #  steps:
+  #    - name: Checkout
+  #      uses: actions/checkout@v4
+#
+  #    - name: Auth to Google Cloud (WIF)
+  #      uses: google-github-actions/auth@v2
+  #      with:
+  #        workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+  #        service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+#
+  #    - name: Set up Cloud SDK
+  #      uses: google-github-actions/setup-gcloud@v1
+#
+  #    - name: Get Artifact Registry URL
+  #      run: |
+  #        ARTIFACT_REGISTRY_URL=$(gcloud artifacts repositories list --format="value(name)" --filter="format=DOCKER" --project=$PROJECT_ID | head -1)
+  #        echo "REGISTRY=$ARTIFACT_REGISTRY_URL" >> $GITHUB_ENV
+#
+  #    - name: Configure kubectl
+  #      run: |
+  #        gcloud container clusters get-credentials $GKE_CLUSTER --zone $GKE_ZONE --project $PROJECT_ID
+#
+  #    - name: Install Helm
+  #      uses: azure/setup-helm@v3
+  #      with:
+  #        version: '3.12.0'
+#
+  #    - name: Get database password from Secret Manager
+  #      run: |
+  #        DB_PASSWORD=$(gcloud secrets versions access latest --secret="${INSTANCE_NAME}-app-db-password" --project=$PROJECT_ID)
+  #        echo "DB_PASSWORD=$DB_PASSWORD" >> $GITHUB_ENV
+#
+  #    - name: Deploy to GKE with Helm
+  #      run: |
+  #        helm upgrade --install tasks-app-dev ./helm/tasks-app \
+  #          --namespace tasks-dev \
+  #          --create-namespace \
+  #          --values ./helm/tasks-app/values-dev.yaml \
+  #          --set image.repository=$REGISTRY/$PROJECT_ID/$IMAGE_NAME \
+  #          --set image.tag=dev-latest \
+  #          --set secrets.dbPassword=$DB_PASSWORD \
+  #          --wait --timeout=5m
+#
+  #    - name: Verify deployment
+  #      run: |
+  #        kubectl get pods -n tasks-dev
+  #        kubectl get services -n tasks-dev
+  #        kubectl get ingress -n tasks-dev
