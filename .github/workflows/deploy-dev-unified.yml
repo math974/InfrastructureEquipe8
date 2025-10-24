@@ -387,7 +387,7 @@ jobs:
             --set env.DB_HOST=$DB_HOST \
             --set env.DB_NAME=$DB_NAME \
             --set env.DB_USER=app_user \
-            --set secrets.dbPassword="$DB_PASSWORD" \
+            --set-string secrets.dbPassword="$DB_PASSWORD" \
             --wait --timeout=10m \
             --debug --atomic
           echo "✅ Déploiement terminé"
